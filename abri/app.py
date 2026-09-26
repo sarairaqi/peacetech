@@ -211,6 +211,7 @@ def app_bootstrap():
         "vaud_url": C.VAUD_URL,
         "evidence_categories": C.EVIDENCE_CATEGORIES,
         "features": L.FEATURES,
+        "assistant": C.ASSISTANT,
         "front": L.get_front(),
         "prefs": L.get_prefs(),
         "last_result": L.last_result(),
@@ -246,6 +247,19 @@ def app_front():
     data = request.get_json(silent=True) or {}
     try:
         return jsonify({"front": L.set_front(data.get("front", ""), data.get("phrase"))})
+    except ValueError as e:
+        abort(400, str(e))
+
+
+# --- Assistant (aperçu) ------------------------------------------------------
+
+@app.post("/api/assistant")
+@protected
+def assistant():
+    """Réponse de l'assistant. Aperçu : texte fixe (voir logic.assistant_reply)."""
+    data = request.get_json(silent=True) or {}
+    try:
+        return jsonify(L.assistant_reply(data.get("messages")))
     except ValueError as e:
         abort(400, str(e))
 

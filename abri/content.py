@@ -765,6 +765,34 @@ DOSSIER_ITEMS = [
      "category": "audio"},
 ]
 
+# Assistant (aperçu) : panneau de discussion ouvert en glissant vers la droite dans Abri,
+# ou avec la bulle de l'accueil. Pas encore relié à un modèle d'IA : voir logic.assistant_reply.
+ASSISTANT = {
+    "name": "Assistant Abri",
+    "status": "Aperçu · pas encore actif",
+    "greeting": [
+        "Bonjour. Je suis l'assistant d'Abri.",
+        "Bientôt, je pourrai vous écouter, répondre à vos questions et vous orienter vers "
+        "les bonnes personnes, à votre rythme.",
+    ],
+    "suggestions": [
+        "Est-ce que ce que je vis est de la violence ?",
+        "Comment porter plainte ?",
+        "Où dormir ce soir en sécurité ?",
+        "J'ai peur, je veux parler à quelqu'un",
+    ],
+    "placeholder_reply": "Je ne suis pas encore disponible : cet assistant est un aperçu. "
+                         "En attendant, des personnes formées peuvent vous répondre tout de suite, "
+                         "gratuitement et en toute confidentialité.",
+    "placeholder_actions": [
+        {"label": "Appeler le 142", "contact": "victimes142"},
+        {"label": "Centre LAVI", "contact": "lavi"},
+        {"label": "Faire le point", "goto": "quiz"},
+    ],
+    "notice": "Aperçu : l'assistant n'est relié à aucune IA pour l'instant. "
+              "Vos messages ne sont transmis à aucun service extérieur ni gardés : ils disparaissent en quittant Abri.",
+}
+
 PLAINTE_INFO = [
     "La plainte se dépose auprès de la police (poste de police ou 117) ou du Ministère public.",
     "Le Centre LAVI (021 631 03 00) peut vous accompagner gratuitement dans toutes les démarches.",

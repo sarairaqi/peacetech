@@ -209,6 +209,30 @@ def check_wiki_unlock(query) -> bool:
     return hmac.compare_digest(_hash_phrase(query), stored)
 
 
+# ---------------------------------------------------------------------------
+# Assistant (aperçu) — point d'entrée du futur modèle d'IA
+# ---------------------------------------------------------------------------
+# Aujourd'hui : réponse fixe, rien n'est gardé. Pour brancher un modèle, remplacer le corps
+# de assistant_reply en gardant la même forme de réponse ({"text", "actions"}). À prévoir :
+#   • danger immédiat détecté → proposer d'abord le 117 / 142 (actions « contact ») ;
+#   • pas de journalisation des messages côté serveur, ni chez le fournisseur du modèle ;
+#   • les réponses orientent vers le réseau vaudois (content.CONTACTS), sans se substituer à lui.
+ASSISTANT_MAX_CHARS = 2000
+
+
+def assistant_reply(messages: list) -> dict:
+    """messages : [{"from": "me" | "bot", "text": str}, …] → {"text", "actions", "status"}."""
+    if not isinstance(messages, list) or not messages:
+        raise ValueError("Aucun message")
+    last = messages[-1]
+    if not isinstance(last, dict) or not str(last.get("text", "")).strip():
+        raise ValueError("Message vide")
+    if len(str(last["text"])) > ASSISTANT_MAX_CHARS:
+        raise ValueError("Message trop long")
+    return {"text": C.ASSISTANT["placeholder_reply"], "actions": C.ASSISTANT["placeholder_actions"],
+            "status": "placeholder"}
+
+
 def check_unlock(recipe_id: str, persons) -> bool:
     """Vrai si (recette, nombre de personnes) correspond au secret configuré."""
     cfg = get_config()

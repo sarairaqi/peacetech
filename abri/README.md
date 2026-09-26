@@ -45,7 +45,10 @@ ou, dans l'espace protégé, Réglages → « Réinitialiser la démo ».
    journal chronologique, état du dossier, **export ZIP** prêt pour un·e avocat·e ou le Centre LAVI.
 8. **Contacts** — réseau vaudois (142, 117, 144, UMV, MalleyPrairie, LAVI, BCI, CSP, Ordre des
    avocats, Centre Prévention de l'Ale, violencequefaire.ch…) avec appel et message via l'app.
-9. **SOS** — bouton rouge en bas : appel police 117 via l'app (pas dans l'historique d'appels).
+9. **Assistant** (aperçu) — glisser vers la droite n'importe où dans Abri, ou toucher la bulle de
+   l'accueil : panneau de discussion avec suggestions de questions. Pas encore d'IA : la réponse est
+   fixe et renvoie vers le 142, le Centre LAVI ou « Ma situation ».
+9b. **SOS** — bouton rouge en bas : appel police 117 via l'app (pas dans l'historique d'appels).
 10. **Apparence Wikipédia** — Réglages d'Abri → « Apparence de l'app » → 📖 Wikipédia, puis
     choisir un mot secret. L'app devient un miroir de Wikipédia (vrais articles, recherche) ;
     taper le mot secret dans la recherche puis Entrée ouvre Abri. La recette secrète ne marche
@@ -102,6 +105,9 @@ wikimedia.org, comme sur le vrai site. Sans Internet, 5 articles intégrés pren
   Une app native pourrait détecter les profils MDM, les partages actifs et les appareils du compte.
 - **Chiffrement du coffre** : les fichiers sont stockés en clair dans `storage/evidence/`
   (l'horodatage et l'empreinte SHA-256 sont réels).
+- **Assistant** : aperçu non fonctionnel. `POST /api/assistant` renvoie une réponse fixe ; le futur
+  modèle d'IA se branche dans `logic.assistant_reply` (même forme de réponse : `text` + `actions`).
+  Les messages ne vivent qu'en mémoire dans le navigateur et sont effacés au verrouillage.
 - **Enregistrement d'urgence** (Réglages, marqué « À venir ») : **placeholder non fonctionnel.**
   L'interrupteur est mémorisé (`logic.FEATURES` / `prefs.json`) mais rien n'enregistre : ni le
   triple-tap, ni la caméra, ni l'ajout au coffre. Impossible en web (le navigateur coupe la caméra

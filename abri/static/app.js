@@ -48,6 +48,8 @@ const I = {
   back: svg('<path d="M15 6l-6 6 6 6"/>'),
   download: svg('<path d="M12 4v12M7 11l5 5 5-5M4 20h16"/>'),
   link: svg('<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>'),
+  chat: svg('<path d="M5 5h14a2 2 0 012 2v8a2 2 0 01-2 2h-6l-5 4v-4H5a2 2 0 01-2-2V7a2 2 0 012-2z"/><path d="M8.5 11h.01M12 11h.01M15.5 11h.01"/>', 'stroke-width="2.2"'),
+  send: svg('<path d="M5 12l14-7-5 15-2.5-6z"/>'),
   camera: svg('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>'),
 };
 
@@ -71,6 +73,7 @@ const S = {
   loc: { scanning: false, scanStep: 0, scan: null, open: {}, platform: 'iphone' },
   ev: { sub: 'pieces', cat: null, catPreset: null, files: null, previews: null, note: '', jtext: '', jdate: '', busy: false },
   contacts: { open: {} },
+  chat: { messages: [], text: '', typing: false },   // assistant (aperçu) : en mémoire, effacé au verrouillage
   overlay: null,
 };
 let idleTimer = null;
@@ -554,6 +557,7 @@ async function unlock(token) {
     S.loc = { scanning: false, scanStep: 0, scan: null, open: {}, platform: /android/i.test(navigator.userAgent) ? 'android' : 'iphone' };
     S.ev = { sub: 'pieces', cat: null, catPreset: null, files: null, previews: null, note: '', jtext: '', jdate: '', busy: false };
     S.contacts = { open: {} };
+    S.chat = { messages: S.boot.assistant.greeting.map((text) => ({ from: 'bot', text })), text: '', typing: false };
     S.overlay = null;
     render();
     resetIdle();
@@ -563,7 +567,7 @@ async function unlock(token) {
 
 function lock(notify = true) {
   if (S.token && notify) api('/api/app/lock', { method: 'POST' }).catch(() => {});
-  S.token = null; S.boot = null; S.overlay = null;
+  S.token = null; S.boot = null; S.overlay = null; S.chat = { messages: [], text: '', typing: false };
   clearInterval(callTimer); clearTimeout(idleTimer);
   S.cover.recipe = null; S.cover.tab = 'recettes'; S.cover.persons = 4;
   if (S.front === 'wiki') { S.mode = 'wiki'; wikiOpen(WIKI_HOME); } else { S.mode = 'cover'; render(); }
@@ -590,6 +594,7 @@ function renderApp() {
       <button class="exit-btn" data-action="quick-exit" title="Retour immédiat à l'app de cuisine">${I.exit} Quitter</button>
     </div>
     <div class="content">${tabs[S.tab]()}</div>
+    ${S.tab === 'home' ? `<button class="chat-fab" data-action="chat-open" aria-label="Ouvrir l'assistant"><span class="chat-fab-tag">Assistant</span>${I.chat}</button>` : ''}
     <div class="bottombar abri-tabbar">
       ${tab('home', I.home, 'Accueil')}${tab('quiz', I.clipboard, 'Situation')}
       <div class="sos-slot"><button class="sos-btn" data-action="sos">SOS<small>POLICE 117</small></button></div>
@@ -614,7 +619,7 @@ function appHome() {
     </div>` : '<p class="small muted map-hint">Touchez un point pour voir le lieu.</p>';
   return `<div class="fade-in">
     <div class="page-title">Vous êtes à l'abri ici</div>
-    <p class="page-sub">« Quitter » ou Échap : retour aux recettes.</p>
+    <p class="page-sub">« Quitter » ou Échap : retour ${S.front === 'wiki' ? 'à Wikipédia' : 'aux recettes'}. Glissez vers la droite pour l'assistant.</p>
     <button class="home-call" data-action="call" data-id="victimes142">${I.phone}<span><b>Parler à quelqu'un</b><small>142 · gratuit, 24h/24</small></span></button>
     <div class="home-grid">
       ${shortcut('quiz', '📋', 'Ma situation')}${shortcut('loc', '📍', 'Localisation')}
@@ -1070,6 +1075,28 @@ function renderOverlay() {
       <p class="tiny muted" style="margin-top:12px">Source du questionnaire et du réseau d'aide : canton de Vaud (vd.ch).</p></div></div>`;
     return;
   }
+  if (O.type === 'chat') {
+    const A = S.boot.assistant; const Ch = S.chat;
+    const acts = (m) => (m.actions && m.actions.length ? `<div class="chat-acts">${m.actions.map((a) => a.contact
+      ? `<button data-action="chat-act" data-contact="${esc(a.contact)}">${I.phone} ${esc(a.label)}</button>`
+      : `<button data-action="chat-act" data-goto="${esc(a.goto)}">${esc(a.label)}</button>`).join('')}</div>` : '');
+    const started = Ch.messages.some((m) => m.from === 'me');
+    overlaysEl.innerHTML = `<div class="overlay chat-wrap${O.anim ? ' anim' : ''}" data-action="overlay-close"><div class="chat-panel" data-stop>
+      <header class="chat-head"><span class="chat-av">${I.chat}</span><div><b>${esc(A.name)}</b><span>${esc(A.status)}</span></div>
+        <button class="icon-btn" data-action="chat-close" aria-label="Fermer">${I.x}</button></header>
+      <button class="chat-sos" data-action="sos">${I.phone} Danger immédiat ? Appeler le 117</button>
+      <div class="chat-log" id="chat-log">
+        ${Ch.messages.map((m) => `<div class="msg ${m.from}"><p>${esc(m.text)}</p>${acts(m)}</div>`).join('')}
+        ${Ch.typing ? '<div class="msg bot typing"><p><i></i><i></i><i></i></p></div>' : ''}
+        ${started ? '' : `<div class="chat-sugg">${A.suggestions.map((t) => `<button data-action="chat-suggest" data-text="${esc(t)}">${esc(t)}</button>`).join('')}</div>`}
+      </div>
+      <div class="chat-compose"><textarea class="chat-input" data-input="chat-text" rows="1" placeholder="Écrivez votre message…">${esc(Ch.text)}</textarea>
+        <button class="chat-send" data-action="chat-send" aria-label="Envoyer">${I.send}</button></div>
+      <p class="chat-notice">${esc(A.notice)}</p>
+    </div></div>`;
+    const log = $('#chat-log', overlaysEl); log.scrollTop = log.scrollHeight;
+    return;
+  }
   if (O.type === 'phrase') {
     overlaysEl.innerHTML = `<div class="overlay dim" data-action="overlay-close"><div class="sheet" data-stop><div class="grip"></div><h3>📖 Apparence Wikipédia</h3>
       <p class="ev-help">L'app ressemblera à Wikipédia. Pour ouvrir Abri, vous taperez un <b>mot secret</b> dans la recherche, puis Entrée.</p>
@@ -1084,6 +1111,36 @@ function renderOverlay() {
       <div class="row"><button class="btn muted block" data-action="overlay-close">Annuler</button><button class="btn ${O.danger ? 'danger' : 'primary'} block" data-action="confirm-ok">${esc(O.ok)}</button></div></div></div>`;
     return;
   }
+}
+
+// --- Assistant (aperçu) ------------------------------------------------------
+// Glisser vers la droite (ou la bulle de l'accueil) ouvre le panneau ; vers la gauche le ferme.
+// Les réponses viennent de /api/assistant (logic.assistant_reply) : texte fixe pour l'instant,
+// futur point de branchement du modèle d'IA.
+function openChat() {
+  if (S.mode !== 'app' || !S.boot) return;
+  S.overlay = { type: 'chat', anim: true }; renderOverlay(); S.overlay.anim = false;
+}
+function closeChat() {
+  const w = $('.chat-wrap', overlaysEl);
+  if (!w) return;
+  w.classList.add('closing');
+  setTimeout(() => { if (S.overlay && S.overlay.type === 'chat') { S.overlay = null; renderOverlay(); } }, 180);
+}
+async function chatSend(raw) {
+  const Ch = S.chat; const text = String(raw || '').trim();
+  if (!text || Ch.typing) return;
+  Ch.messages.push({ from: 'me', text }); Ch.text = ''; Ch.typing = true; renderOverlay();
+  let reply;
+  try {
+    const history = Ch.messages.map((m) => ({ from: m.from, text: m.text }));
+    // petit délai : le temps de lecture d'une vraie réponse, pour que l'aperçu soit crédible
+    [reply] = await Promise.all([api('/api/assistant', { method: 'POST', body: { messages: history } }), new Promise((r) => setTimeout(r, 900))]);
+  } catch (e) {
+    reply = { text: 'Connexion impossible pour le moment. Vous pouvez appeler le 142 à tout moment.', actions: [{ label: 'Appeler le 142', contact: 'victimes142' }] };
+  }
+  Ch.typing = false; Ch.messages.push({ from: 'bot', text: reply.text, actions: reply.actions || [] });
+  if (S.overlay && S.overlay.type === 'chat') { renderOverlay(); if (!isTouch()) $('.chat-input', overlaysEl)?.focus(); }
 }
 
 function openCall(contactId, sos = false) {
@@ -1174,6 +1231,14 @@ const actions = {
     try { await api('/api/app/reset', { method: 'POST' }); } catch (e) { /* le jeton est déjà invalide */ }
     S.token = null; S.boot = null; S.overlay = null; S.front = 'recettes'; S.setup = { step: 0, recipe: null, persons: 4, fromSettings: false };
     S.mode = 'setup'; render(); toast('Démo réinitialisée'); }, true),
+  'chat-open': openChat,
+  'chat-close': closeChat,
+  'chat-send': () => chatSend(S.chat.text),
+  'chat-suggest': (d) => chatSend(d.text),
+  'chat-act': (d) => {
+    S.overlay = null; renderOverlay();
+    if (d.contact) openCall(d.contact); else if (d.goto) { S.tab = d.goto; render(); }
+  },
   'confirm-ok': () => { const fn = S.overlay && S.overlay.onOk; S.overlay = null; renderOverlay(); if (fn) fn(); },
   'overlay-close': () => { S.overlay = null; renderOverlay(); },
   'sos': () => openCall('police', true),
@@ -1227,6 +1292,7 @@ const inputs = {
     if (!norm(el.value)) { S.wiki.results = []; paintWikiResults(); return; }
     wikiTimer = setTimeout(() => wikiSearch(el.value), 200); },
   'phrase': (el) => { if (S.overlay) S.overlay.phrase = el.value; },
+  'chat-text': (el) => { S.chat.text = el.value; el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 110)}px`; },
   'cover-search': (el) => { S.cover.query = el.value; refreshGrid(); },
   'persons': (el) => { const v = parseInt(el.value, 10); if (!isNaN(v)) { S.cover.persons = Math.max(S.personsMin, Math.min(S.personsMax, v)); } },
   'jtext': (el) => { S.ev.jtext = el.value; },
@@ -1255,6 +1321,29 @@ screen.addEventListener('input', onInput);
 overlaysEl.addEventListener('input', onInput);
 overlaysEl.addEventListener('change', onInput);
 ['click', 'keydown', 'touchstart', 'input'].forEach((ev) => document.addEventListener(ev, () => { if (S.mode === 'app') resetIdle(); }, { passive: true }));
+// Assistant : Entrée envoie (Maj+Entrée = nouvelle ligne)
+overlaysEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && e.target.matches('.chat-input')) { e.preventDefault(); chatSend(e.target.value); }
+});
+// Abri : glisser vers la droite ouvre l'assistant, vers la gauche le referme.
+// Doigt (téléphone) ou souris (démo sur ordinateur) ; pas sur la carte ni dans un champ.
+let swipe = null;
+function swipeStart(x, y, target) {
+  swipe = S.mode === 'app' && !target.closest('.office-map-slot, .leaflet-container, input, textarea, select, .dropzone')
+    ? { x, y, t: Date.now() } : null;
+}
+function swipeEnd(x, y) {
+  if (!swipe) return;
+  const dx = x - swipe.x; const dy = y - swipe.y; const dt = Date.now() - swipe.t; swipe = null;
+  if (dt > 800 || Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
+  const chatOpen = S.overlay && S.overlay.type === 'chat';
+  if (dx > 0 && !S.overlay) openChat();
+  else if (dx < 0 && chatOpen) closeChat();
+}
+phoneEl.addEventListener('touchstart', (e) => { const t = e.touches[0]; swipeStart(t.clientX, t.clientY, e.target); }, { passive: true });
+phoneEl.addEventListener('touchend', (e) => { const t = e.changedTouches[0]; swipeEnd(t.clientX, t.clientY); }, { passive: true });
+phoneEl.addEventListener('mousedown', (e) => swipeStart(e.clientX, e.clientY, e.target));
+phoneEl.addEventListener('mouseup', (e) => swipeEnd(e.clientX, e.clientY));
 // Coffre : glisser-déposer des fichiers sur la zone d'ajout
 screen.addEventListener('dragover', (e) => { const z = e.target.closest('#ev-drop'); if (!z) return; e.preventDefault(); z.classList.add('over'); });
 screen.addEventListener('dragleave', (e) => { const z = e.target.closest('#ev-drop'); if (z && !z.contains(e.relatedTarget)) z.classList.remove('over'); });
