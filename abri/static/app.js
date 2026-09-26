@@ -69,7 +69,7 @@ const S = {
   home: { selected: null, list: false },   // accueil : lieu choisi sur la carte, liste dépliée
   quiz: { stage: 'intro', i: 0, answers: {}, situation: {}, si: 0, result: null, busy: false },
   loc: { scanning: false, scanStep: 0, scan: null, open: {}, platform: 'iphone' },
-  ev: { sub: 'pieces', cat: 'blessure', file: null, note: '', jtext: '', jdate: '' , busy: false },
+  ev: { sub: 'pieces', cat: null, catPreset: null, files: null, previews: null, note: '', jtext: '', jdate: '', busy: false },
   contacts: { open: {} },
   overlay: null,
 };
@@ -552,7 +552,7 @@ async function unlock(token) {
     S.quiz = { stage: 'intro', i: 0, answers: {}, situation: {}, si: 0, result: S.boot.last_result, busy: false };
     // Les étapes s'affichent pour le téléphone utilisé (modifiable dans l'onglet)
     S.loc = { scanning: false, scanStep: 0, scan: null, open: {}, platform: /android/i.test(navigator.userAgent) ? 'android' : 'iphone' };
-    S.ev = { sub: 'pieces', cat: 'blessure', file: null, note: '', jtext: '', jdate: '', busy: false };
+    S.ev = { sub: 'pieces', cat: null, catPreset: null, files: null, previews: null, note: '', jtext: '', jdate: '', busy: false };
     S.contacts = { open: {} };
     S.overlay = null;
     render();
@@ -855,51 +855,100 @@ async function toggleAudit(id) {
 // Écrit en français facile : phrases courtes, mots simples, une icône sur chaque chose.
 // Pensé pour un enfant de 9 ans ou une personne qui lit mal le français.
 // (L'empreinte SHA-256 et les dates exactes restent dans le fichier téléchargé pour l'avocat·e.)
+// Icônes du coffre (traits fins, pas d'emoji : ton sobre)
+const EVI = {
+  upload: svg('<path d="M12 15V4M7.5 8.5L12 4l4.5 4.5"/><path d="M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4"/>'),
+  file: svg('<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/>'),
+  files: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/>'),
+  journal: svg('<path d="M6 3h10a2 2 0 012 2v16H8a2 2 0 01-2-2z"/><path d="M10 8h5M10 12h5"/>'),
+  dossier: svg('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 11l2 2 4-4M9 17h6"/>'),
+  info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>'),
+  todo: svg('<circle cx="12" cy="12" r="9"/>'),
+  done: svg('<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/>'),
+  blessure: svg('<path d="M9.5 4h5v5.5H20v5h-5.5V20h-5v-5.5H4v-5h5.5z"/>'),
+  message: svg('<path d="M4 5h16v11H9l-5 4z"/>'),
+  degats: svg('<path d="M12 3.5l9 16H3z"/><path d="M12 10v4.5M12 17.2v.3"/>'),
+  document: svg('<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>'),
+  audio: svg('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/>'),
+  autre: svg('<path d="M20 11.5l-7.8 7.8a5 5 0 01-7.1-7.1l8.2-8.2a3.4 3.4 0 014.8 4.8l-8.2 8.2a1.7 1.7 0 01-2.4-2.4l7.4-7.4"/>'),
+};
+const EV_ACCEPT = 'image/*,audio/*,video/*,application/pdf,.doc,.docx,.txt';
+const EV_MAX = 50 * 1024 * 1024;
+const fmtSize = (n) => n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} Ko` : `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} Mo`;
+const fmtShort = (iso) => { const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString('fr-CH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+const isTouch = () => matchMedia('(pointer: coarse)').matches;
+
 function appEvidence() {
   const E = S.ev; const B = S.boot;
   const cats = Object.fromEntries(B.evidence_categories.map((c) => [c.id, c]));
   const catOf = (e) => cats[e.category] || cats.autre;
-  const seg = (id, icon, label, n) => `<button class="${E.sub === id ? 'active' : ''}" data-action="ev-sub" data-sub="${id}"><span class="seg-ic">${icon}</span><span>${label} <small>${n}</small></span></button>`;
+  const seg = (id, icon, label, n) => `<button class="${E.sub === id ? 'active' : ''}" data-action="ev-sub" data-sub="${id}">${icon}<span>${label}</span><small>${n}</small></button>`;
   let body;
   if (E.sub === 'pieces') {
-    body = `<button class="btn primary block big-btn" data-action="ev-add">📷 Ajouter une photo ou un fichier</button>
-      ${B.evidence.length ? B.evidence.map((e) => `<div class="ev-item">
-        <div class="thumb">${e.mime.startsWith('image/') ? `<img src="/api/evidence/file/${esc(e.id)}?t=${encodeURIComponent(S.token)}" alt="">` : catOf(e).icon}</div>
-        <div class="info"><div class="nm">${catOf(e).icon} ${esc(e.note || catOf(e).label)}</div><div class="dt">📅 ${esc(fmtDay(e.added_at))}</div></div>
-        <button class="icon-btn del" data-action="ev-del" data-id="${esc(e.id)}" title="Effacer">${I.trash}</button></div>`).join('')
-      : `<div class="ev-empty"><b>Le coffre est vide.</b><p>Vous pouvez garder ici :</p>
-          <div class="ev-examples">${['blessure', 'message', 'degats', 'document'].map((id) => `<span>${cats[id].icon} ${esc(cats[id].label.toLowerCase())}</span>`).join('')}</div></div>`}`;
+    // La zone de dépôt : toucher pour choisir, ou glisser-déposer (ordinateur)
+    body = `<label class="dropzone" id="ev-drop">
+        <input type="file" data-input="ev-file" multiple accept="${EV_ACCEPT}">
+        <span class="dz-ic">${EVI.upload}</span>
+        <b>Ajouter une photo ou un fichier</b>
+        <span class="dz-sub">${isTouch() ? 'Touchez ici pour choisir' : 'Cliquez pour choisir, ou glissez les fichiers ici'}</span>
+        <span class="dz-types">Photos, captures d'écran, PDF, audio, vidéo · 50 Mo max.</span>
+      </label>
+      ${isTouch() ? `<label class="btn soft block dz-camera"><input type="file" data-input="ev-file" accept="image/*" capture="environment" hidden>${I.camera} Prendre une photo</label>` : ''}
+      ${B.evidence.length ? `<div class="section-title">Dans le coffre · ${B.evidence.length}</div>
+        <div class="ev-list">${B.evidence.map((e) => { const c = catOf(e);
+          return `<div class="ev-row">
+          <div class="thumb">${e.mime.startsWith('image/') ? `<img src="/api/evidence/file/${esc(e.id)}?t=${encodeURIComponent(S.token)}" alt="">` : e.mime.startsWith('audio/') ? EVI.audio : EVI.document}</div>
+          <div class="info"><div class="nm">${esc(e.note || c.label)}</div>
+            <div class="dt">${[e.note ? c.label : null, fmtShort(e.added_at), fmtSize(e.size)].filter(Boolean).map(esc).join(' · ')}</div></div>
+          <button class="icon-btn del" data-action="ev-del" data-id="${esc(e.id)}" title="Supprimer" aria-label="Supprimer">${I.trash}</button></div>`; }).join('')}</div>`
+      : `<p class="ev-empty">Aucun fichier pour l'instant. Par exemple : la photo d'une blessure, la capture d'écran d'un message, un certificat médical.</p>`}
+      <p class="ev-note">${I.shield}<span>Chaque fichier est daté à l'ajout et reçoit une empreinte numérique : on peut prouver qu'il n'a pas été modifié.</span></p>`;
   } else if (E.sub === 'journal') {
-    body = `<div class="card">
-        <p class="ev-help">Écrivez ce qui s'est passé, avec vos mots. Même court. Les fautes, ce n'est pas grave.</p>
-        <div class="ev-prompts"><span>❓ Quoi ?</span><span>📍 Où ?</span><span>👀 Qui a vu ?</span></div>
-        <div class="field"><label>📝 Qu'est-ce qui s'est passé ?</label><textarea data-input="jtext">${esc(E.jtext)}</textarea></div>
-        <div class="field"><label>📅 Quand ?</label><input type="datetime-local" data-input="jdate" value="${esc(E.jdate || localDT())}"></div>
-        <button class="btn primary block big-btn" style="margin:0" data-action="journal-add" ${E.busy ? 'disabled' : ''}>✓ Enregistrer</button></div>
-      ${B.journal.length ? `<div class="section-title">Déjà écrit</div>${B.journal.map((j) => `<div class="journal-entry">
-        <div class="row between"><span class="dt">📅 ${esc(fmtDay(j.occurred))}</span><button class="icon-btn del" style="width:30px;height:30px" data-action="journal-del" data-id="${esc(j.id)}" title="Effacer">${I.trash}</button></div>
-        <p>${esc(j.text)}</p><div class="rec">Écrit le ${esc(fmtDate(j.recorded))}</div></div>`).join('')}` : ''}`;
+    body = `<div class="card ev-form">
+        <div class="field"><label>Ce qui s'est passé</label><textarea data-input="jtext" placeholder="Décrivez les faits avec vos mots : ce qui s'est passé, où, et qui était présent. Quelques phrases suffisent.">${esc(E.jtext)}</textarea></div>
+        <div class="field"><label>Date et heure des faits</label><input type="datetime-local" data-input="jdate" value="${esc(E.jdate || localDT())}"></div>
+        <button class="btn primary block" data-action="journal-add" ${E.busy ? 'disabled' : ''}>${E.busy ? 'Enregistrement…' : 'Enregistrer'}</button></div>
+      ${B.journal.length ? `<div class="section-title">Entrées · ${B.journal.length}</div>${B.journal.map((j) => `<div class="journal-entry">
+        <div class="row between"><span class="dt">${esc(fmtDay(j.occurred))}</span><button class="icon-btn del" data-action="journal-del" data-id="${esc(j.id)}" title="Supprimer" aria-label="Supprimer">${I.trash}</button></div>
+        <p>${esc(j.text)}</p><div class="rec">Écrit le ${esc(fmtShort(j.recorded))}</div></div>`).join('')}`
+      : '<p class="ev-empty">Aucune entrée pour l\'instant. Notez les faits dès que possible, même brièvement : les détails s\'oublient vite.</p>'}`;
   } else {
     const D = B.dossier;
-    const actions = (d) => {
+    const acts = (d) => {
       const btns = [];
-      if (d.contact) btns.push(`<button class="btn soft sm" data-action="call" data-id="${esc(d.contact)}">📞 Appeler</button>`);
-      if (d.category === 'journal') btns.push(`<button class="btn soft sm" data-action="goto" data-goto="journal">📝 Écrire</button>`);
-      else if (d.category) btns.push(`<button class="btn soft sm" data-action="goto" data-goto="evidence" data-cat="${esc(d.category)}">📷 Ajouter</button>`);
-      return btns.length ? `<div class="row">${btns.join('')}</div>` : '<p class="tiny">À faire vous-même, en dehors d\'Abri.</p>';
+      if (d.category === 'journal') btns.push(`<button class="link-btn" data-action="goto" data-goto="journal">${EVI.journal} Rédiger</button>`);
+      else if (d.category) btns.push(`<button class="link-btn" data-action="goto" data-goto="evidence" data-cat="${esc(d.category)}">${EVI.upload} Ajouter</button>`);
+      if (d.contact) btns.push(`<button class="link-btn" data-action="call" data-id="${esc(d.contact)}">${I.phone} Appeler</button>`);
+      return btns.length ? `<div class="dl-acts">${btns.join('')}</div>` : '<p class="dl-self">À préparer en dehors d\'Abri.</p>';
     };
-    body = `<p class="ev-help">Pour porter plainte, ces choses aident. <b>${D.n_done} sur ${D.n_total}</b> sont prêtes.</p>
-      <div class="progress" style="margin:0 0 14px"><i style="width:${D.n_total ? Math.round(100 * D.n_done / D.n_total) : 0}%"></i></div>
-      ${D.items.map((d) => `<div class="list-item ${d.done ? 'done' : ''}"><span class="li-ic">${d.done ? '✅' : esc(d.icon || '•')}</span>
-        <div><b>${esc(d.label)}</b><p>${esc(d.detail)}</p>${d.done ? '' : actions(d)}</div></div>`).join('')}
-      ${B.last_result ? '' : '<p class="small muted">Faites « Ma situation » pour avoir une liste faite pour vous.</p>'}
-      <div class="card ev-export"><b>📦 Tout donner à un avocat ou au Centre LAVI</b>
-        <p>Un seul fichier avec vos photos, vos papiers et ce que vous avez écrit.</p>
-        <button class="btn primary block" data-action="ev-export">⬇️ Télécharger le fichier</button>
-        <p class="tiny muted">⚠️ Le fichier va dans les téléchargements du téléphone. Après l'avoir donné, effacez-le.</p></div>`;
+    body = `<div class="card dossier-head"><div class="row between"><b>Pièces pour une plainte</b><span>${D.n_done} / ${D.n_total}</span></div>
+        <div class="progress"><i style="width:${D.n_total ? Math.round(100 * D.n_done / D.n_total) : 0}%"></i></div>
+        ${B.last_result ? '' : '<p>Liste générale. Faites « Ma situation » pour une liste adaptée à votre cas.</p>'}</div>
+      <div class="dossier-list">${D.items.map((d) => `<div class="dl-item ${d.done ? 'done' : ''}"><span class="dl-st">${d.done ? EVI.done : EVI.todo}</span>
+        <div><b>${esc(d.label)}${d.optional ? ' <span class="pill">Facultatif</span>' : ''}</b><p>${esc(d.detail)}</p>${d.done ? '' : acts(d)}</div></div>`).join('')}</div>
+      <div class="card ev-export"><b>Exporter le dossier</b>
+        <p>Un fichier ZIP avec vos fichiers, votre journal et un index daté, à remettre à un·e avocat·e ou au Centre LAVI.</p>
+        <button class="btn primary block" data-action="ev-export">${I.download} Télécharger le dossier (.zip)</button>
+        <p class="ev-note">${EVI.info}<span>Le fichier est enregistré dans les téléchargements du téléphone. Supprimez-le après l'avoir remis.</span></p></div>`;
   }
-  return `<div class="fade-in"><div class="page-title">🔒 Mon coffre</div><p class="page-sub">Gardez ici ce qui montre ce que vous vivez. C'est caché dans Abri.</p>
-    <div class="segmented ev-tabs">${seg('pieces', '📷', 'Photos', B.evidence.length)}${seg('journal', '📝', 'Écrire', B.journal.length)}${seg('dossier', '✅', 'Ma liste', `${B.dossier.n_done}/${B.dossier.n_total}`)}</div>${body}</div>`;
+  return `<div class="fade-in ev"><div class="page-title">Coffre</div><p class="page-sub">Vos preuves, datées et rangées. Visibles seulement dans Abri.</p>
+    <div class="segmented ev-tabs">${seg('pieces', EVI.files, 'Fichiers', B.evidence.length)}${seg('journal', EVI.journal, 'Journal', B.journal.length)}${seg('dossier', EVI.dossier, 'Dossier', `${B.dossier.n_done}/${B.dossier.n_total}`)}</div>${body}</div>`;
+}
+
+// Fichiers choisis (bouton, appareil photo ou glisser-déposer) → feuille de détails
+function openEvidenceSheet(list) {
+  const files = [...list].filter((f) => f.size <= EV_MAX);
+  if (files.length < list.length) toast('Fichier trop lourd (50 Mo max.)');
+  if (!files.length) return;
+  const E = S.ev;
+  (E.previews || []).forEach((u) => u && URL.revokeObjectURL(u));
+  E.files = files;
+  E.previews = files.map((f) => (f.type.startsWith('image/') ? URL.createObjectURL(f) : null));
+  // type proposé : celui demandé par le dossier, sinon deviné (audio, document), sinon à choisir
+  const t = files[0].type;
+  E.cat = E.catPreset || (t.startsWith('audio/') ? 'audio' : /pdf|word|text/.test(t) || /\.(docx?|txt|pdf)$/i.test(files[0].name) ? 'document' : null);
+  E.catPreset = null; E.note = ''; E.busy = false;
+  S.overlay = { type: 'evidence' }; renderOverlay();
 }
 
 async function refreshEvidence() {
@@ -909,21 +958,29 @@ async function refreshEvidence() {
 
 async function submitEvidence() {
   const E = S.ev;
-  if (!E.file) { toast('Choisissez d\'abord une photo ou un fichier'); return; }
-  E.busy = true; renderOverlay();
-  const form = new FormData(); form.append('file', E.file); form.append('category', E.cat); form.append('note', E.note);
-  try { await api('/api/evidence', { method: 'POST', form }); await refreshEvidence(); }
-  catch (e) { toast(e.message); E.busy = false; renderOverlay(); return; }
-  E.busy = false; E.file = null; E.note = ''; S.overlay = null;
-  render(); toast('✓ C\'est dans le coffre');
+  if (!E.files || !E.files.length) { toast('Choisissez d\'abord une photo ou un fichier'); return; }
+  if (!E.cat) { toast('Choisissez le type de pièce'); return; }
+  E.busy = 0; renderOverlay();
+  try {
+    for (const f of E.files) {
+      const form = new FormData(); form.append('file', f); form.append('category', E.cat); form.append('note', E.note);
+      await api('/api/evidence', { method: 'POST', form });
+      E.busy++; renderOverlay();
+    }
+    await refreshEvidence();
+  } catch (e) { toast(e.message); E.busy = false; await refreshEvidence().catch(() => {}); renderOverlay(); render(); return; }
+  const n = E.files.length;
+  (E.previews || []).forEach((u) => u && URL.revokeObjectURL(u));
+  E.busy = false; E.files = null; E.previews = null; E.note = ''; S.overlay = null;
+  render(); toast(n > 1 ? `${n} fichiers ajoutés au coffre` : 'Ajouté au coffre');
 }
 
 async function submitJournal() {
-  const E = S.ev; if (!E.jtext.trim()) { toast('Écrivez ce qui s\'est passé'); return; }
+  const E = S.ev; if (!E.jtext.trim()) { toast('Décrivez d\'abord ce qui s\'est passé'); return; }
   E.busy = true; render();
   try { await api('/api/journal', { method: 'POST', body: { text: E.jtext, occurred: E.jdate || localDT() } }); await refreshEvidence(); }
   catch (e) { toast(e.message); E.busy = false; render(); return; }   // on garde le texte pour réessayer
-  E.busy = false; E.jtext = ''; E.jdate = ''; render(); toast('✓ C\'est noté');
+  E.busy = false; E.jtext = ''; E.jdate = ''; render(); toast('Entrée enregistrée');
 }
 
 // --- 4d. Contacts ----------------------------------------------------------
@@ -984,17 +1041,17 @@ function renderOverlay() {
     return;
   }
   if (O.type === 'evidence') {
-    const E = S.ev;
-    // Trois étapes numérotées, une question à la fois
-    const step = (n, text, extra = '') => `<div class="step"><span class="step-n">${n}</span><b>${text}</b>${extra}</div>`;
-    overlaysEl.innerHTML = `<div class="overlay dim" data-action="overlay-close"><div class="sheet" data-stop><div class="grip"></div><h3>📷 Ajouter au coffre</h3>
-      ${step(1, 'Qu\'est-ce que c\'est ?')}
-      <div class="cat-grid">${S.boot.evidence_categories.map((c) => `<button class="${E.cat === c.id ? 'on' : ''}" data-action="ev-cat" data-cat="${esc(c.id)}"><span class="em">${c.icon}</span>${esc(c.label)}</button>`).join('')}</div>
-      ${step(2, 'Choisissez la photo ou le fichier')}
-      <div class="file-drop ${E.file ? 'has' : ''}">${E.file ? `✅ ${esc(E.file.name)}` : `${I.camera}<br>Touchez ici`}<input type="file" data-input="ev-file" accept="image/*,audio/*,video/*,application/pdf,.doc,.docx,.txt"></div>
-      ${step(3, 'Un petit mot ?', ' <span class="small muted">(pas obligatoire)</span>')}
-      <div class="field"><input data-input="ev-note" placeholder="Ex. : mon bras, lundi soir" value="${esc(E.note)}"></div>
-      <button class="btn primary block big-btn" style="margin:0" data-action="ev-submit" ${E.busy ? 'disabled' : ''}>${E.busy ? 'Un instant…' : '🔒 Mettre dans le coffre'}</button></div></div>`;
+    const E = S.ev; const n = E.files.length;
+    const busy = E.busy !== false;
+    overlaysEl.innerHTML = `<div class="overlay dim" data-action="overlay-close"><div class="sheet ev-sheet" data-stop><div class="grip"></div><h3>Ajouter au coffre</h3>
+      <div class="ev-preview">${E.files.map((f, i) => `<div class="pv">${E.previews[i] ? `<img src="${E.previews[i]}" alt="">` : `<span class="pv-ic">${EVI.file}</span>`}
+        <div class="pv-t"><b>${esc(f.name)}</b><span>${fmtSize(f.size)}</span></div></div>`).join('')}
+        <label class="link-btn pv-change"><input type="file" data-input="ev-file" multiple accept="${EV_ACCEPT}" hidden>Changer</label></div>
+      <div class="ev-label">Type de pièce</div>
+      <div class="type-grid">${S.boot.evidence_categories.map((c) => `<button class="${E.cat === c.id ? 'on' : ''}" data-action="ev-cat" data-cat="${esc(c.id)}">${EVI[c.id] || EVI.file}<span>${esc(c.label)}</span></button>`).join('')}</div>
+      <div class="field"><label>Note <span class="opt">(facultatif)</span></label><input data-input="ev-note" placeholder="Ex. : bras gauche, lundi soir" value="${esc(E.note)}"></div>
+      <p class="ev-note">${EVI.info}<span>La date et l'heure d'ajout sont enregistrées automatiquement.</span></p>
+      <button class="btn primary block" data-action="ev-submit" ${busy ? 'disabled' : ''}>${busy ? `Ajout en cours…${n > 1 ? ` ${E.busy}/${n}` : ''}` : `${I.lock} ${n > 1 ? `Ajouter ${n} fichiers au coffre` : 'Ajouter au coffre'}`}</button></div></div>`;
     return;
   }
   if (O.type === 'settings') {
@@ -1141,7 +1198,7 @@ const actions = {
   'goto': (d) => {
     if (d.goto === 'sos') return openCall('police', true);
     if (d.goto === 'location') { S.tab = 'loc'; render(); return; }
-    if (d.goto === 'evidence') { S.tab = 'ev'; S.ev.sub = 'pieces'; if (d.cat) S.ev.cat = d.cat; render(); if (d.cat) { S.overlay = { type: 'evidence' }; renderOverlay(); } return; }
+    if (d.goto === 'evidence') { S.tab = 'ev'; S.ev.sub = 'pieces'; S.ev.catPreset = d.cat || null; render(); if (d.cat) $('#ev-drop input', screen).click(); return; }
     if (d.goto === 'journal') { S.tab = 'ev'; S.ev.sub = 'journal'; render(); return; }
     if (d.goto === 'dossier') { const el = $('#dossier', screen); if (el) el.scrollIntoView({ behavior: 'smooth' }); }
   },
@@ -1153,14 +1210,13 @@ const actions = {
   'audit-goto': (d) => { S.loc.open[d.item] = true; render(); const el = $(`#audit-${d.item}`, screen); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
   // — coffre
   'ev-sub': (d) => { S.ev.sub = d.sub; render(); },
-  'ev-add': () => { S.ev.file = null; S.overlay = { type: 'evidence' }; renderOverlay(); },
-  'ev-cat': (d) => { S.ev.cat = d.cat; renderOverlay(); },
+  'ev-cat': (d) => { if (S.ev.busy === false) { S.ev.cat = d.cat; renderOverlay(); } },
   'ev-submit': submitEvidence,
-  'ev-del': (d) => confirmBox('Effacer ceci ?', 'Ce sera effacé pour toujours.', 'Effacer', async () => {
+  'ev-del': (d) => confirmBox('Supprimer ce fichier ?', 'Il sera supprimé définitivement du coffre.', 'Supprimer', async () => {
     try { await api(`/api/evidence/${d.id}`, { method: 'DELETE' }); await refreshEvidence(); render(); } catch (e) { toast(e.message); } }, true),
-  'ev-export': () => { const a = document.createElement('a'); a.href = `/api/evidence/export?t=${encodeURIComponent(S.token)}`; a.download = ''; document.body.appendChild(a); a.click(); a.remove(); toast('⬇️ Fichier téléchargé'); },
+  'ev-export': () => { const a = document.createElement('a'); a.href = `/api/evidence/export?t=${encodeURIComponent(S.token)}`; a.download = ''; document.body.appendChild(a); a.click(); a.remove(); toast('Téléchargement du dossier lancé'); },
   'journal-add': submitJournal,
-  'journal-del': (d) => confirmBox('Effacer ce texte ?', 'Il sera effacé pour toujours.', 'Effacer', async () => {
+  'journal-del': (d) => confirmBox('Supprimer cette entrée ?', 'Elle sera supprimée définitivement du journal.', 'Supprimer', async () => {
     try { await api(`/api/journal/${d.id}`, { method: 'DELETE' }); await refreshEvidence(); render(); } catch (e) { toast(e.message); } }, true),
   // — contacts
   'axis-toggle': (d) => { S.contacts.open[d.axis] = S.contacts.open[d.axis] === false; render(); },
@@ -1177,7 +1233,8 @@ const inputs = {
   'jdate': (el) => { S.ev.jdate = el.value; },
   'sms-text': (el) => { if (S.overlay) S.overlay.text = el.value; },
   'ev-note': (el) => { S.ev.note = el.value; },
-  'ev-file': (el) => { S.ev.file = el.files[0] || null; renderOverlay(); },
+  // un champ fichier déclenche « input » puis « change » : on vide le champ après lecture
+  'ev-file': (el) => { if (!el.files.length) return; const list = [...el.files]; el.value = ''; openEvidenceSheet(list); },
 };
 
 function onClick(e) {
@@ -1198,6 +1255,11 @@ screen.addEventListener('input', onInput);
 overlaysEl.addEventListener('input', onInput);
 overlaysEl.addEventListener('change', onInput);
 ['click', 'keydown', 'touchstart', 'input'].forEach((ev) => document.addEventListener(ev, () => { if (S.mode === 'app') resetIdle(); }, { passive: true }));
+// Coffre : glisser-déposer des fichiers sur la zone d'ajout
+screen.addEventListener('dragover', (e) => { const z = e.target.closest('#ev-drop'); if (!z) return; e.preventDefault(); z.classList.add('over'); });
+screen.addEventListener('dragleave', (e) => { const z = e.target.closest('#ev-drop'); if (z && !z.contains(e.relatedTarget)) z.classList.remove('over'); });
+screen.addEventListener('drop', (e) => { const z = e.target.closest('#ev-drop'); if (!z) return; e.preventDefault(); z.classList.remove('over');
+  if (e.dataTransfer.files.length) openEvidenceSheet(e.dataTransfer.files); });
 // Recherche Wikipédia : Entrée valide (article, ou Abri si c'est le mot secret)
 screen.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || !e.target.matches('.wk-input')) return;
