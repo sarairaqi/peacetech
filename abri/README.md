@@ -46,7 +46,11 @@ ou, dans l'espace protégé, Réglages → « Réinitialiser la démo ».
 8. **Contacts** — réseau vaudois (142, 117, 144, UMV, MalleyPrairie, LAVI, BCI, CSP, Ordre des
    avocats, Centre Prévention de l'Ale, violencequefaire.ch…) avec appel et message via l'app.
 9. **SOS** — bouton rouge en bas : appel police 117 via l'app (pas dans l'historique d'appels).
-10. **Quitter** (ou touche Échap) — retour immédiat à l'app de cuisine ; verrouillage automatique
+10. **Apparence Wikipédia** — Réglages d'Abri → « Apparence de l'app » → 📖 Wikipédia, puis
+    choisir un mot secret. L'app devient un miroir de Wikipédia (vrais articles, recherche) ;
+    taper le mot secret dans la recherche puis Entrée ouvre Abri. La recette secrète ne marche
+    plus tant que cette apparence est active.
+11. **Quitter** (ou touche Échap) — retour immédiat à l'app de cuisine ; verrouillage automatique
     après 3 min d'inactivité.
 
 ## Structure du projet
@@ -63,8 +67,12 @@ abri/
 │                     #   et une réserve de 140 d'où sortent 2 « recettes du jour »
 ├── templates/index.html
 ├── static/app.js     # interface (une seule page, état + rendu)
+├── wikimirror.py     # apparence « Wikipédia » : relais vers fr.wikipedia.org (recherche, articles)
+├── static/wiki.js    # accueil du miroir + 5 articles de secours (démo sans Internet)
 ├── static/style.css  # deux univers visuels : cuisine / Abri
 ├── static/icon-*.png # icône « app de cuisine » (écran d'accueil du téléphone)
+├── static/vendor/leaflet/  # Leaflet 1.9.4 (carte de l'accueil d'Abri), chargé seulement
+│                     #   une fois Abri ouvert ; fonds de carte : OpenStreetMap
 └── storage/          # créé à l'usage : config.json, preuves, journal (ignoré par git)
 ```
 
@@ -80,6 +88,12 @@ les routes protégées. Le jeton vit en mémoire côté serveur et en mémoire c
 rien n'est écrit dans le navigateur (pas de localStorage, pas d'URL), le titre de l'onglet reste
 « Petits Plats ».
 
+Avec l'apparence **Wikipédia**, c'est `POST /api/wiki/search {q, submit}` qui joue ce rôle : il renvoie
+toujours des suggestions, et un jeton si la recherche validée (Entrée) est le mot secret. Le mot secret
+n'est gardé que sous forme d'empreinte SHA-256 (`wiki_phrase` dans `config.json`). Seul le secret de
+l'apparence active ouvre Abri. Le serveur interroge fr.wikipedia.org ; les images viennent de
+wikimedia.org, comme sur le vrai site. Sans Internet, 5 articles intégrés prennent le relais.
+
 ## Ce qui est simulé (à dire au jury)
 
 - **Appels et messages** : écran d'appel VoIP et composeur de message dans l'app ; aucun appel réel
@@ -88,6 +102,11 @@ rien n'est écrit dans le navigateur (pas de localStorage, pas d'URL), le titre 
   Une app native pourrait détecter les profils MDM, les partages actifs et les appareils du compte.
 - **Chiffrement du coffre** : les fichiers sont stockés en clair dans `storage/evidence/`
   (l'horodatage et l'empreinte SHA-256 sont réels).
+- **Enregistrement d'urgence** (Réglages, marqué « À venir ») : **placeholder non fonctionnel.**
+  L'interrupteur est mémorisé (`logic.FEATURES` / `prefs.json`) mais rien n'enregistre : ni le
+  triple-tap, ni la caméra, ni l'ajout au coffre. Impossible en web (le navigateur coupe la caméra
+  dès l'arrière-plan) : une vraie version demanderait une app native. Voir le commentaire dans
+  `logic.py` pour les limites légales (art. 179bis/ter CP) et de sécurité à traiter d'abord.
 
 ## Sources
 

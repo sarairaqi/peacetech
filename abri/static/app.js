@@ -55,7 +55,9 @@ const I = {
 // État
 // ---------------------------------------------------------------------------
 const S = {
-  mode: 'loading',                // 'setup' | 'cover' | 'app'
+  mode: 'loading',                // 'setup' | 'wiki' | 'cover' | 'app'
+  front: 'recettes',              // apparence de l'app : 'recettes' | 'wiki' (Réglages d'Abri)
+  wiki: { title: '', page: null, loading: false, search: false, q: '', results: [], searched: '', open: {}, menu: false },
   recipes: [], categories: [], personsMin: 1, personsMax: 12,
   // persons : le nombre choisi (− / + / saisie) ; adapted : celui des quantités affichées,
   // mis à jour seulement par le bouton « Adapter les quantités »
@@ -63,9 +65,10 @@ const S = {
            favs: new Set(), cart: [], profile: { notif: true, metric: true, dark: false } },
   daily: [],                      // les 2 recettes du jour (S.recipes = les 60 recettes fixes)
   setup: { step: 0, recipe: null, persons: 4, fromSettings: false },
-  token: null, boot: null, tab: 'quiz',
+  token: null, boot: null, tab: 'home',
+  home: { selected: null, list: false },   // accueil : lieu choisi sur la carte, liste dépliée
   quiz: { stage: 'intro', i: 0, answers: {}, situation: {}, si: 0, result: null, busy: false },
-  loc: { scanning: false, scanStep: 0, scan: null, open: {} },
+  loc: { scanning: false, scanStep: 0, scan: null, open: {}, platform: 'iphone' },
   ev: { sub: 'pieces', cat: 'blessure', file: null, note: '', jtext: '', jdate: '' , busy: false },
   contacts: { open: {} },
   overlay: null,
@@ -79,6 +82,10 @@ let callTimer = null;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const grad = (r) => `linear-gradient(135deg, ${r.gradient[0]}, ${r.gradient[1]})`;
 const fmtDate = (iso) => { const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString('fr-CH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+// « lundi 22 septembre à 21:30 » : plus facile à lire qu'une date en chiffres
+const fmtDay = (iso) => { const d = new Date(iso); if (isNaN(d)) return iso;
+  return d.toLocaleString('fr-CH', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+    ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }) }); };
 const localDT = (d = new Date()) => { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 
 const findRecipe = (id) => [...S.recipes, ...S.daily].find((r) => r.id === id) || null;
@@ -133,6 +140,7 @@ function tickClock() {
 let lastViewKey = '';
 function viewKey() {
   if (S.mode === 'app') return `app:${S.tab}:${S.quiz.stage}:${S.ev.sub}`;
+  if (S.mode === 'wiki') return `wiki:${S.wiki.title}:${S.wiki.search}:${!!S.wiki.page}`;
   if (S.mode === 'cover') return `cover:${S.cover.tab}:${S.cover.recipe ? S.cover.recipe.id : ''}`;
   return `${S.mode}:${S.setup.step}`;
 }
@@ -144,13 +152,17 @@ function render() {
   const keepScroll = content && key === prevKey ? content.scrollTop : 0;
   lastViewKey = key;
 
-  const abri = S.mode !== 'cover';
-  const dark = !abri && S.cover.profile.dark;
-  screen.className = `screen ${abri ? 'theme-abri' : 'theme-cover'}${dark ? ' dark' : ''}${screen.classList.contains('unlocking') ? ' unlocking' : ''}`;
+  const wiki = S.mode === 'wiki';
+  const abri = !wiki && S.mode !== 'cover';
+  const dark = S.mode === 'cover' && S.cover.profile.dark;
+  screen.className = `screen ${wiki ? 'theme-wiki' : abri ? 'theme-abri' : 'theme-cover'}${dark ? ' dark' : ''}${screen.classList.contains('unlocking') ? ' unlocking' : ''}`;
   phoneEl.classList.toggle('on-abri', abri);
+  phoneEl.classList.toggle('on-wiki', wiki);
   phoneEl.classList.toggle('cover-dark', dark);
+  setIdentity();
 
   if (S.mode === 'loading') screen.innerHTML = '';
+  else if (wiki) screen.innerHTML = renderWiki();
   else if (S.mode === 'setup') screen.innerHTML = renderSetup();
   else if (S.mode === 'cover') screen.innerHTML = renderCover();
   else screen.innerHTML = renderApp();
@@ -160,6 +172,175 @@ function render() {
   // pas d'animation d'apparition quand on redessine le même écran (évite le clignotement)
   if (key === prevKey) $$('.fade-in', screen).forEach((el) => el.classList.remove('fade-in'));
   if (!S.overlay || !overlaysEl.firstChild) renderOverlay();
+  if (S.mode === 'app' && S.tab === 'home') mountMap();
+  if (wiki && S.wiki.search) { const q = $('.wk-input', screen); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+}
+
+// ===========================================================================
+// 0. APPARENCE « WIKIPÉDIA » — miroir de fr.wikipedia.org (au choix dans les Réglages d'Abri)
+// ===========================================================================
+// Au lieu de l'app de recettes, l'app peut ressembler à Wikipédia. Le serveur relaie les vrais
+// articles (wikimirror.py) ; sans connexion, quelques articles intégrés prennent le relais
+// (static/wiki.js). Le secret : un mot tapé dans la recherche, validé avec Entrée ; le serveur
+// répond par des résultats ordinaires, ou par un jeton si c'est le bon mot.
+const norm = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const wikiFresh = () => ({ title: WIKI_HOME, page: null, loading: false, search: false, q: '', results: [], searched: '', open: {}, menu: false });
+const WI = {
+  menu: svg('<path d="M4 7h16M4 12h16M4 17h16"/>'),
+  search: svg('<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/>'),
+  back: svg('<path d="M19 12H5M11 6l-6 6 6 6"/>'),
+  lang: svg('<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.5 3.5 5.5 3.5 8.5s-1 6-3.5 8.5c-2.5-2.5-3.5-5.5-3.5-8.5s1-6 3.5-8.5z"/>'),
+  star: svg('<path d="M12 4l2.4 5 5.3.6-4 3.7 1.1 5.3L12 16l-4.8 2.6 1.1-5.3-4-3.7 5.3-.6z"/>'),
+  edit: svg('<path d="M4 20h4L19 9l-4-4L4 16v4z"/>'),
+  chev: svg('<path d="M9 6l6 6-6 6"/>'),
+};
+// Titre d'onglet, icône et couleur de barre suivent l'apparence choisie, même dans Abri
+function setIdentity() {
+  const wiki = S.front === 'wiki';
+  document.title = !wiki ? 'Petits Plats' : S.mode === 'wiki' && S.wiki.page ? `${S.wiki.page.title} — Wikipédia` : 'Wikipédia';
+  $('link[rel="icon"]').href = wiki ? '/static/icon-wiki.svg' : '/static/icon-192.png';
+  $('meta[name="theme-color"]').content = wiki ? '#ffffff' : '#c8412f';
+}
+
+// Nettoyage du HTML de Wikipédia : liste blanche de balises, aucun attribut d'origine gardé
+// (ni style, ni script, ni on…) ; liens internes → navigation dans le miroir, liens externes
+// → texte simple ; images seulement depuis wikimedia.org.
+const WK_KEEP = new Set(['P', 'B', 'I', 'EM', 'STRONG', 'A', 'H3', 'H4', 'UL', 'OL', 'LI', 'TABLE', 'TBODY', 'THEAD', 'TR', 'TH', 'TD',
+  'CAPTION', 'SUP', 'SUB', 'BR', 'SPAN', 'DIV', 'BLOCKQUOTE', 'DL', 'DT', 'DD', 'FIGURE', 'FIGCAPTION', 'IMG', 'SMALL', 'ABBR']);
+const WK_DROP = 'style, script, link, meta, noscript, .mw-editsection, .reference, .mw-ref, .noprint, .metadata, .navbox, .navbox-container, '
+  + '.bandeau-container, .bandeau-portail, .homonymie, .hatnote, .mw-empty-elt, .autres-projets, .printfooter, .catlinks, '
+  + '.mw-kartographer-map, .coordinates, #coordinates, .toc';
+const WK_NS = /^(Fichier|File|Image|Média|Aide|Help|Catégorie|Category|Portail|Modèle|Template|Wikipédia|Spécial|Special|Projet|Discussion|Utilisateur|Module|Référence)\s*:/i;
+function wikiClean(el) {
+  for (const c of [...el.children]) {
+    wikiClean(c);
+    const tag = c.tagName;
+    if (!WK_KEEP.has(tag)) { c.replaceWith(...c.childNodes); continue; }
+    const cls = c.getAttribute('class') || '';
+    const keep = {};
+    if (tag === 'A') {
+      const m = /^\/wiki\/([^#?]+)/.exec(c.getAttribute('href') || '');
+      const title = m ? decodeURIComponent(m[1]).replace(/_/g, ' ') : '';
+      if (!title || WK_NS.test(title)) { c.replaceWith(...c.childNodes); continue; }
+      Object.assign(keep, { 'data-action': 'wiki-go', 'data-id': title });
+    } else if (tag === 'IMG') {
+      const src = (c.getAttribute('src') || '').replace(/^\/\//, 'https://');
+      if (!/^https:\/\/(upload|thumb)\.wikimedia\.org\//.test(src)) { c.remove(); continue; }
+      Object.assign(keep, { src, alt: c.getAttribute('alt') || '', width: c.getAttribute('width'), height: c.getAttribute('height'), loading: 'lazy' });
+    } else if (tag === 'TD' || tag === 'TH') {
+      Object.assign(keep, { colspan: c.getAttribute('colspan'), rowspan: c.getAttribute('rowspan') });
+    }
+    if (/infobox/.test(cls)) keep.class = 'wk-infobox';
+    else if (tag === 'TABLE') keep.class = 'wk-table';
+    for (const a of [...c.attributes]) c.removeAttribute(a.name);
+    for (const [k, v] of Object.entries(keep)) if (v != null) c.setAttribute(k, v);
+  }
+}
+// Découpe comme sur le site mobile : introduction (1er paragraphe avant l'infobox), puis sections repliées
+function wikiParse(title, html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const root = doc.querySelector('.mw-parser-output') || doc.body;
+  root.querySelectorAll(WK_DROP).forEach((e) => e.remove());
+  const lead = doc.createElement('div'); const sections = []; let cur = null;
+  for (const node of [...root.childNodes]) {
+    const h = node.nodeType === 1 && (node.matches('.mw-heading2') ? node.querySelector('h2') : node.tagName === 'H2' ? node : null);
+    if (h) { cur = { h: h.textContent.trim(), body: doc.createElement('div') }; sections.push(cur); continue; }
+    (cur ? cur.body : lead).appendChild(node);
+  }
+  const first = [...lead.children].find((e) => e.tagName === 'P' && e.textContent.trim());
+  if (first) lead.prepend(first);
+  const out = (el) => { wikiClean(el); return el.innerHTML; };
+  return { title, lead: out(lead), sections: sections.map((x) => ({ h: x.h, html: out(x.body) })).filter((x) => x.html.trim()) };
+}
+// Articles intégrés (sans connexion)
+function wikiLocal(title) {
+  const a = WIKI_ARTICLES.find((x) => norm(x.title) === norm(title)); if (!a) return null;
+  const links = (h) => h.replace(/\[\[(\w+)\|([^\]]+)\]\]/g, (_, id, t) => `<a data-action="wiki-go" data-id="${esc((WIKI_ARTICLES.find((x) => x.id === id) || a).title)}">${t}</a>`);
+  const box = `<table class="wk-infobox"><caption>${esc(a.title)}</caption>${a.infobox.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table>`;
+  return { title: a.title, lead: `<p>${links(a.lead)}</p>${box}`, sections: a.sections.map((x) => ({ h: x.h, html: links(x.html) })) };
+}
+const wikiLocalSearch = (q) => { const n = norm(q); return n ? WIKI_ARTICLES.filter((a) => norm(a.title).includes(n) || norm(a.desc).includes(n)).map((a) => ({ title: a.title, desc: a.desc })) : []; };
+
+const wikiCache = new Map();
+async function wikiOpen(title) {
+  S.wiki = { ...wikiFresh(), title, loading: true };
+  render();
+  let page = wikiCache.get(title);
+  if (!page) {
+    let status = 0;
+    try {
+      const r = await fetch(`/api/wiki/page?title=${encodeURIComponent(title)}`); status = r.status;
+      if (r.ok) { const d = await r.json(); page = wikiParse(d.title, d.html); }
+    } catch (e) { /* hors ligne */ }
+    if (page) wikiCache.set(title, page);
+    else page = wikiLocal(title) || { title, sections: [],
+      lead: `<p>${status === 404 ? 'Cette page n\'existe pas.' : 'Impossible de charger la page. Vérifiez votre connexion Internet.'}</p>` };
+  }
+  if (S.mode !== 'wiki' || S.wiki.title !== title) return;   // on a navigué ailleurs entre-temps
+  S.wiki.page = page; S.wiki.loading = false;
+  render(); const c = $('.content', screen); if (c) c.scrollTop = 0;
+}
+
+// Recherche : suggestions pendant la frappe (jamais de déverrouillage), Entrée = validation
+let wikiTimer = null; let wikiSeq = 0;
+async function wikiSearch(q, submit = false) {
+  const seq = ++wikiSeq;
+  let d;
+  try {
+    d = await (await fetch('/api/wiki/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q, submit }) })).json();
+  } catch (e) { d = { results: [], offline: true }; }
+  if (d.token) {                       // bon mot secret : on efface la saisie et on ouvre Abri
+    const inp = $('.wk-input', screen); if (inp) { inp.value = ''; inp.blur(); }
+    S.wiki = wikiFresh(); unlock(d.token); return null;
+  }
+  const results = d.offline ? wikiLocalSearch(q) : (d.results || []);
+  if (seq === wikiSeq && S.mode === 'wiki' && S.wiki.search) { S.wiki.results = results; S.wiki.searched = q; paintWikiResults(); }
+  return results;
+}
+async function wikiSubmit(q) {
+  if (!norm(q)) return;
+  clearTimeout(wikiTimer);
+  const res = await wikiSearch(q, true);
+  if (!res) return;
+  const hit = res.find((r) => norm(r.title) === norm(q)) || res[0];
+  if (hit) wikiOpen(hit.title);
+}
+function wikiResultsHtml() {
+  const W = S.wiki;
+  if (!W.results.length) return norm(W.searched) && norm(W.searched) === norm(W.q) ? `<p class="wk-none">Aucun résultat pour « ${esc(W.q.trim())} »</p>` : '';
+  return W.results.map((r) => `<button class="wk-result" data-action="wiki-go" data-id="${esc(r.title)}"><b>${esc(r.title)}</b><span>${esc(r.desc)}</span></button>`).join('');
+}
+function paintWikiResults() { const el = $('#wk-results', screen); if (el) el.innerHTML = wikiResultsHtml(); }
+
+function renderWiki() {
+  const W = S.wiki;
+  if (W.search) {
+    return `<div class="wk"><header class="wk-bar wk-searchbar"><button class="wk-icon" data-action="wiki-search-close" aria-label="Retour">${WI.back}</button>
+      <input class="wk-input" data-input="wiki-q" type="search" placeholder="Rechercher sur Wikipédia" value="${esc(W.q)}" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search"></header>
+      <div class="content wk-results" id="wk-results">${wikiResultsHtml()}</div></div>`;
+  }
+  const a = W.page;
+  return `<div class="wk">
+    <header class="wk-bar"><button class="wk-icon" data-action="wiki-menu" aria-label="Menu">${WI.menu}</button>
+      <span class="wk-brand">Wikipédia<small>L'encyclopédie libre</small></span>
+      <button class="wk-icon" data-action="wiki-search" aria-label="Rechercher">${WI.search}</button></header>
+    ${W.menu ? `<div class="wk-drawer-bg" data-action="wiki-menu"></div><nav class="wk-drawer">
+      <button data-action="wiki-go" data-id="${esc(WIKI_HOME)}">Accueil</button><button data-action="wiki-random">Au hasard</button><button data-action="wiki-search">Rechercher</button></nav>` : ''}
+    <div class="content wk-page">
+      <h1 class="wk-title">${esc(a ? a.title : W.title)}</h1>
+      <div class="wk-tabs"><span class="on">Article</span><span>Discussion</span><span class="wk-tools">${WI.lang}${WI.star}${WI.edit}</span></div>
+      ${!a ? '<div class="wk-loading"><i></i><i></i><i></i><i></i></div>' : `
+      <div class="wk-lead">${a.lead}</div>
+      ${a.sections.map((x, i) => `<section class="wk-sec${W.open[i] ? ' open' : ''}"><h2 data-action="wiki-sec" data-i="${i}">${WI.chev}${esc(x.h)}</h2>${W.open[i] ? `<div class="wk-sec-body">${x.html}</div>` : ''}</section>`).join('')}
+      <footer class="wk-foot">Le contenu est disponible sous licence CC BY-SA 4.0 sauf mention contraire.</footer>`}
+    </div></div>`;
+}
+
+async function wikiRandom() {
+  let title = null;
+  try { const r = await fetch('/api/wiki/random'); if (r.ok) title = (await r.json()).title; } catch (e) { /* hors ligne */ }
+  if (!title) { const others = WIKI_ARTICLES.filter((x) => x.title !== S.wiki.title); title = others[Math.floor(Math.random() * others.length)].title; }
+  wikiOpen(title);
 }
 
 // ===========================================================================
@@ -367,9 +548,10 @@ async function unlock(token) {
   try { S.boot = await api('/api/app/bootstrap'); }
   catch (e) { screen.classList.remove('unlocking'); toast(e.message); return; }
   setTimeout(() => {
-    S.mode = 'app'; S.tab = 'quiz';
+    S.mode = 'app'; S.tab = 'home'; S.home = { selected: null, list: false };
     S.quiz = { stage: 'intro', i: 0, answers: {}, situation: {}, si: 0, result: S.boot.last_result, busy: false };
-    S.loc = { scanning: false, scanStep: 0, scan: null, open: {} };
+    // Les étapes s'affichent pour le téléphone utilisé (modifiable dans l'onglet)
+    S.loc = { scanning: false, scanStep: 0, scan: null, open: {}, platform: /android/i.test(navigator.userAgent) ? 'android' : 'iphone' };
     S.ev = { sub: 'pieces', cat: 'blessure', file: null, note: '', jtext: '', jdate: '', busy: false };
     S.contacts = { open: {} };
     S.overlay = null;
@@ -383,8 +565,8 @@ function lock(notify = true) {
   if (S.token && notify) api('/api/app/lock', { method: 'POST' }).catch(() => {});
   S.token = null; S.boot = null; S.overlay = null;
   clearInterval(callTimer); clearTimeout(idleTimer);
-  S.mode = 'cover'; S.cover.recipe = null; S.cover.tab = 'recettes'; S.cover.persons = 4;
-  render();
+  S.cover.recipe = null; S.cover.tab = 'recettes'; S.cover.persons = 4;
+  if (S.front === 'wiki') { S.mode = 'wiki'; wikiOpen(WIKI_HOME); } else { S.mode = 'cover'; render(); }
 }
 
 function resetIdle() {
@@ -396,22 +578,131 @@ function resetIdle() {
 // 4. ESPACE PROTÉGÉ — « Abri »
 // ===========================================================================
 function renderApp() {
-  const tabs = { quiz: appQuiz, loc: appLocation, ev: appEvidence, contacts: appContacts };
-  const tab = (id, icon, label) => `<button class="tab ${S.tab === id ? 'active' : ''}" data-action="tab" data-tab="${id}">${icon}${label}</button>`;
+  const tabs = { home: appHome, quiz: appQuiz, loc: appLocation, ev: appEvidence, contacts: appContacts };
+  // Les contacts s'ouvrent depuis l'accueil : l'onglet Accueil reste allumé
+  const current = S.tab === 'contacts' ? 'home' : S.tab;
+  const tab = (id, icon, label) => `<button class="tab ${current === id ? 'active' : ''}" data-action="tab" data-tab="${id}">${icon}${label}</button>`;
   return `<div class="view">
     <div class="topbar abri-top">
-      <div class="brand"><span class="lg">${I.shield}</span> Abri</div>
+      <button class="brand" data-action="tab" data-tab="home"><span class="lg">${I.shield}</span> Abri</button>
       <span style="flex:1"></span>
       <button class="icon-btn" data-action="settings" title="Réglages">${I.gear}</button>
       <button class="exit-btn" data-action="quick-exit" title="Retour immédiat à l'app de cuisine">${I.exit} Quitter</button>
     </div>
     <div class="content">${tabs[S.tab]()}</div>
     <div class="bottombar abri-tabbar">
-      ${tab('quiz', I.clipboard, 'Situation')}${tab('loc', I.pin, 'Localisation')}
+      ${tab('home', I.home, 'Accueil')}${tab('quiz', I.clipboard, 'Situation')}
       <div class="sos-slot"><button class="sos-btn" data-action="sos">SOS<small>POLICE 117</small></button></div>
-      ${tab('ev', I.folder, 'Preuves')}${tab('contacts', I.phone, 'Contacts')}
+      ${tab('loc', I.pin, 'Localisation')}${tab('ev', I.folder, 'Coffre')}
     </div>
   </div>`;
+}
+
+// --- 4·. Accueil : raccourcis + carte des lieux d'aide ------------------------
+// Volontairement dépouillé : un bouton pour parler à quelqu'un, quatre raccourcis,
+// une carte à trois couleurs. Toucher un point affiche UN lieu ; la liste est repliée.
+function appHome() {
+  const B = S.boot; const H = S.home; const types = B.office_types;
+  const shortcut = (goto, icon, title) => `<button class="home-tile" data-action="tab" data-tab="${goto}"><span class="em">${icon}</span>${title}</button>`;
+  const sel = B.offices.find((o) => o.id === H.selected);
+  const card = sel ? `<div class="office-card">
+      <button class="office-close" data-action="office-close" title="Fermer">${I.x}</button>
+      <b><i class="dot" style="background:${esc(types[sel.type].color)}"></i>${esc(sel.name)} · ${esc(sel.town)}</b>
+      <div class="small muted">${esc(sel.address)}</div>
+      <p class="small">${esc(sel.note)}</p>
+      <button class="btn primary block" data-action="call-office" data-id="${esc(sel.id)}">${I.phone} Appeler · ${esc(sel.phone)}</button>
+    </div>` : '<p class="small muted map-hint">Touchez un point pour voir le lieu.</p>';
+  return `<div class="fade-in">
+    <div class="page-title">Vous êtes à l'abri ici</div>
+    <p class="page-sub">« Quitter » ou Échap : retour aux recettes.</p>
+    <button class="home-call" data-action="call" data-id="victimes142">${I.phone}<span><b>Parler à quelqu'un</b><small>142 · gratuit, 24h/24</small></span></button>
+    <div class="home-grid">
+      ${shortcut('quiz', '📋', 'Ma situation')}${shortcut('loc', '📍', 'Localisation')}
+      ${shortcut('ev', '🔒', 'Mon coffre')}${shortcut('contacts', '📞', 'Contacts')}
+    </div>
+    <div class="section-title">Où trouver de l'aide</div>
+    <div id="map-slot" class="office-map-slot"><div class="map-loading"><span class="spinner"></span> Chargement de la carte…</div></div>
+    <div class="map-legend">${Object.values(types).map((t) => `<span><i class="dot" style="background:${esc(t.color)}"></i>${esc(t.label)}</span>`).join('')}</div>
+    ${card}
+    <button class="btn muted sm block" data-action="office-list">${H.list ? 'Masquer la liste' : `Voir la liste des ${B.offices.length} lieux`}</button>
+    ${H.list ? `<div class="office-list">${B.offices.map((o) => `<button class="office-line" data-action="office-show" data-id="${esc(o.id)}"><i class="dot" style="background:${esc(types[o.type].color)}"></i><span><b>${esc(o.name)}</b> · ${esc(o.town)}</span>${I.chevR}</button>`).join('')}</div>` : ''}
+  </div>`;
+}
+
+// La carte (Leaflet) n'est chargée qu'à la première ouverture de l'accueil d'Abri :
+// l'app de cuisine ne charge jamais rien qui la trahisse. Un seul élément carte est créé,
+// puis déplacé dans la page à chaque rendu (render() redessine tout l'écran).
+let officeMap = null;
+let leafletLoading = null;
+function loadLeaflet() {
+  if (!leafletLoading) {
+    leafletLoading = new Promise((resolve, reject) => {
+      const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = '/static/vendor/leaflet/leaflet.min.css';
+      const js = document.createElement('script'); js.src = '/static/vendor/leaflet/leaflet.min.js';
+      js.onload = resolve; js.onerror = () => { leafletLoading = null; reject(new Error('Leaflet')); };
+      document.head.append(css, js);
+    });
+  }
+  return leafletLoading;
+}
+
+async function mountMap() {
+  try { await loadLeaflet(); } catch (e) {
+    const slot = $('#map-slot', screen);
+    if (slot) slot.innerHTML = '<p class="small muted map-loading">Carte indisponible : voyez la liste ci-dessous.</p>';
+    return;
+  }
+  const slot = $('#map-slot', screen); if (!slot) return;          // on a changé d'onglet entre-temps
+  const Lf = window.L;
+  if (!officeMap) {
+    const el = document.createElement('div'); el.className = 'office-map';
+    slot.replaceChildren(el);
+    const map = Lf.map(el, { scrollWheelZoom: false });
+    map.attributionControl.setPrefix(false);
+    Lf.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+    }).addTo(map);
+    const markers = {};
+    for (const o of S.boot.offices) {
+      markers[o.id] = Lf.circleMarker([o.lat, o.lon], { radius: 8, color: '#fff', weight: 2, fillColor: S.boot.office_types[o.type].color, fillOpacity: 1 })
+        .on('click', () => selectOffice(o.id, false)).addTo(map);
+    }
+    officeMap = { el, map, markers };
+    showAllOffices();
+  } else {
+    slot.replaceChildren(officeMap.el);
+    officeMap.map.invalidateSize();
+    if (S.home.refit) { S.home.refit = false; showAllOffices(); }   // fiche fermée : retour à tout le canton
+  }
+  // Le lieu choisi est plus gros sur la carte
+  for (const [id, m] of Object.entries(officeMap.markers)) {
+    const on = id === S.home.selected;
+    m.setRadius(on ? 12 : 8).setStyle({ weight: on ? 3 : 2 });
+    if (on) m.bringToFront();
+  }
+}
+
+// Vue d'ensemble : tout le canton
+function showAllOffices() {
+  if (!officeMap) return;
+  officeMap.map.fitBounds(window.L.latLngBounds(S.boot.offices.map((o) => [o.lat, o.lon])), { padding: [24, 24], animate: false });
+}
+
+// Choisir un lieu (depuis la carte ou la liste) : sa fiche s'affiche sous la carte
+function selectOffice(id, fromList) {
+  const o = S.boot.offices.find((x) => x.id === id); if (!o) return;
+  S.home.selected = id;
+  render();
+  if (fromList) {
+    const slot = $('#map-slot', screen); if (slot) slot.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    loadLeaflet().then(() => { if (officeMap) officeMap.map.setView([o.lat, o.lon], 14); }).catch(() => {});
+  }
+}
+
+function openOfficeCall(id) {
+  const o = S.boot.offices.find((x) => x.id === id); if (!o) return;
+  S.overlay = { type: 'call', contact: { title: `${o.name} · ${o.town}`, org: S.boot.office_types[o.type].label, phone: o.phone } };
+  renderOverlay();
 }
 
 // --- 4a. Questionnaire ------------------------------------------------------
@@ -497,30 +788,45 @@ async function quizEvaluate() {
 }
 
 // --- 4b. Localisation ------------------------------------------------------
-const SCAN_STEPS = ['Recherche de profils de configuration et de gestion d\'appareil…', 'Vérification des partages de position (Localiser, Google Maps, Snap Map…)…', 'Analyse des permissions de localisation des applications…', 'Appareils connectés à votre compte…', 'Recherche de traqueurs Bluetooth…'];
+const SCAN_STEPS = ['Qui voit votre position…', 'Applis qui vous surveillent…', 'Appareils connectés à votre compte…', 'Traqueurs près de vous…'];
+const PLATFORMS = { iphone: 'iPhone', android: 'Android' };
 
 function appLocation() {
   const L = S.loc; const A = S.boot.audit;
-  const ring = (pct) => { const r = 34, c = 2 * Math.PI * r; const col = pct >= 80 ? '#2e9e5b' : pct >= 40 ? '#f2a900' : '#e63946';
-    return `<div class="ring"><svg width="84" height="84" viewBox="0 0 84 84"><circle cx="42" cy="42" r="${r}" stroke="#1f3155" stroke-width="9" fill="none"/><circle cx="42" cy="42" r="${r}" stroke="${col}" stroke-width="9" fill="none" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - pct / 100)}"/></svg><div class="val">${pct}%</div></div>`; };
+  const byId = Object.fromEntries(A.items.map((i) => [i.id, i]));
+
+  // 1. Vérification automatique (démo) : chaque résultat renvoie au point à régler
   let scanBlock;
   if (L.scanning) scanBlock = `<ul class="scan-steps">${SCAN_STEPS.map((s, n) => `<li class="${n < L.scanStep ? 'done' : ''}">${n < L.scanStep ? '✓' : n === L.scanStep ? '<span class="spinner"></span>' : '·'} ${s}</li>`).join('')}</ul>`;
   else if (L.scan) {
-    const lbl = { high: 'Élevé', medium: 'Moyen', ok: 'OK' };
-    scanBlock = `<p class="small muted" style="margin:0 0 6px">${L.scan.counts.high} risque${L.scan.counts.high > 1 ? 's' : ''} élevé${L.scan.counts.high > 1 ? 's' : ''}, ${L.scan.counts.medium} moyen${L.scan.counts.medium > 1 ? 's' : ''} — analyse du ${fmtDate(L.scan.scanned_at)}</p>
-      ${L.scan.findings.map((f) => `<div class="finding"><span class="badge ${f.level}">${lbl[f.level]}</span><div><b>${esc(f.text)}</b>${f.detail ? `<p>${esc(f.detail)}</p>` : ''}${f.level !== 'ok' ? `<button class="fix" data-action="audit-goto" data-item="${f.item}">Corriger →</button>` : ''}</div></div>`).join('')}
-      <button class="btn soft sm" style="margin-top:12px" data-action="scan">Relancer l'analyse</button>`;
-  } else scanBlock = `<p class="small muted" style="margin:0 0 12px">Recherche les profils suspects (logiciels espions), les partages de position actifs, les appareils inconnus connectés à vos comptes et les permissions trop larges.</p><button class="btn primary block" data-action="scan">Analyser mon téléphone</button>`;
+    const lbl = { high: 'À régler', medium: 'À vérifier', ok: 'OK' };
+    const todo = L.scan.counts.high + L.scan.counts.medium;
+    scanBlock = `<p class="small muted" style="margin:0 0 6px">${todo ? `${todo} point${todo > 1 ? 's' : ''} à regarder` : 'Rien d\'inquiétant trouvé'}</p>
+      ${L.scan.findings.map((f) => `<div class="finding"><span class="badge ${f.level}">${lbl[f.level]}</span><div><b>${esc(f.text)}</b>${f.detail ? `<p>${esc(f.detail)}</p>` : ''}${f.level !== 'ok' && byId[f.item] ? `<button class="fix" data-action="audit-goto" data-item="${esc(f.item)}">Voir comment faire →</button>` : ''}</div></div>`).join('')}
+      <button class="btn soft sm" style="margin-top:12px" data-action="scan">Vérifier à nouveau</button>`;
+  } else scanBlock = `<p class="small muted" style="margin:0 0 12px">Abri cherche qui peut voir votre position, les applis qui vous surveillent et les appareils connectés à votre compte.</p><button class="btn primary block" data-action="scan">Vérifier mon téléphone</button>`;
 
-  const item = (it) => { const open = L.open[it.id]; const done = A.done[it.id];
-    return `<div class="audit-item ${done ? 'done' : ''}" id="audit-${it.id}"><div class="head"><span class="sev ${it.severity}"></span><button style="flex:1;text-align:left;color:inherit;display:flex;align-items:center;gap:8px" data-action="audit-open" data-item="${it.id}"><b style="flex:1">${esc(it.title)}</b>${open ? I.chevD : I.chevR}</button><button class="box ${done ? 'on' : ''}" data-action="audit-toggle" data-item="${it.id}" title="Marquer comme fait">${done ? I.check : ''}</button></div>
-      ${open ? `<div class="body"><p class="risk">${esc(it.risk)}</p><ol>${it.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>` : ''}</div>`; };
+  // 2. Les points à vérifier, regroupés en trois questions simples
+  const item = (it) => {
+    const open = L.open[it.id]; const done = A.done[it.id];
+    const steps = Array.isArray(it.steps) ? it.steps : it.steps[L.platform];
+    return `<div class="audit-item ${done ? 'done' : ''}" id="audit-${esc(it.id)}"><div class="head"><button style="flex:1;text-align:left;color:inherit;display:flex;align-items:center;gap:8px" data-action="audit-open" data-item="${esc(it.id)}"><b style="flex:1">${esc(it.title)}${it.priority && !done ? ' <span class="badge medium">Important</span>' : ''}</b>${open ? I.chevD : I.chevR}</button><button class="box ${done ? 'on' : ''}" data-action="audit-toggle" data-item="${esc(it.id)}" title="C'est fait">${done ? I.check : ''}</button></div>
+      ${open ? `<div class="body"><p class="risk">${esc(it.why)}</p>
+        ${it.warning ? `<div class="advice">⚠️ ${esc(it.warning)}</div>` : ''}
+        <ol>${steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>
+        <button class="btn ${done ? 'muted' : 'soft'} sm" style="margin-top:10px" data-action="audit-toggle" data-item="${esc(it.id)}">${done ? 'Finalement, pas encore fait' : '✓ C\'est fait'}</button></div>` : ''}</div>`;
+  };
 
-  return `<div class="fade-in"><div class="page-title">Localisation</div><p class="page-sub">Coupez ou maîtrisez tout ce qui permet de suivre vos déplacements.</p>
-    <div class="card score-card">${ring(A.score)}<div><b>Sécurité de la localisation</b><div class="muted small">${A.n_done} / ${A.n_total} vérifications effectuées</div><div class="tiny muted" style="margin-top:4px">Cochez chaque point une fois réglé sur votre téléphone.</div></div></div>
-    <div class="card"><div class="row between" style="margin-bottom:6px"><h3 style="margin:0">Analyse automatique</h3><span class="tiny muted">démo · résultats simulés</span></div>${scanBlock}</div>
-    <div class="card highlight-card"><h3>⚡ Tout couper d'un coup (iPhone)</h3><p class="small muted">Réglages › Confidentialité et sécurité › <b>Contrôle de sécurité</b> › <b>Réinitialisation d'urgence</b> : révoque en une fois tous les partages de position et les accès accordés à d'autres personnes et appareils.</p></div>
+  return `<div class="fade-in"><div class="page-title">Localisation</div><p class="page-sub">Vérifiez que personne ne peut savoir où vous êtes.</p>
+    <div class="advice"><b>⚠️ Avant de changer un réglage</b><br>${esc(A.warning)}
+      <div style="margin-top:10px"><button class="btn soft sm" data-action="call" data-id="victimes142">${I.phone} Appeler le 142</button></div></div>
+    <div class="row between" style="margin:14px 0 0"><b class="small">Mon téléphone</b><span class="muted small">${A.n_done} sur ${A.n_total} vérifiés</span></div>
+    <div class="segmented">${Object.entries(PLATFORMS).map(([id, label]) => `<button class="${L.platform === id ? 'active' : ''}" data-action="loc-platform" data-platform="${id}">${label}</button>`).join('')}</div>
+    <div class="progress" style="margin-top:0"><i style="width:${Math.round(100 * A.n_done / A.n_total)}%"></i></div>
+    <div class="card"><div class="row between" style="margin-bottom:6px"><h3 style="margin:0">Vérification rapide</h3><span class="tiny muted">démo · résultats simulés</span></div>${scanBlock}</div>
+    ${A.quick[L.platform] ? `<div class="card highlight-card"><h3>⚡ Tout couper d'un coup</h3><p class="small muted">${esc(A.quick[L.platform])}</p></div>` : ''}
     ${A.groups.map((g) => `<div class="section-title">${g.icon} ${esc(g.title)}</div>${A.items.filter((i) => i.group === g.id).map(item).join('')}`).join('')}
+    <div class="card" style="margin-top:16px"><h3>Bon à savoir</h3><ul class="info-list">${A.tips.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>
   </div>`;
 }
 
@@ -546,35 +852,54 @@ async function toggleAudit(id) {
 }
 
 // --- 4c. Coffre à preuves ---------------------------------------------------
+// Écrit en français facile : phrases courtes, mots simples, une icône sur chaque chose.
+// Pensé pour un enfant de 9 ans ou une personne qui lit mal le français.
+// (L'empreinte SHA-256 et les dates exactes restent dans le fichier téléchargé pour l'avocat·e.)
 function appEvidence() {
   const E = S.ev; const B = S.boot;
   const cats = Object.fromEntries(B.evidence_categories.map((c) => [c.id, c]));
-  const seg = (id, label) => `<button class="${E.sub === id ? 'active' : ''}" data-action="ev-sub" data-sub="${id}">${label}</button>`;
+  const catOf = (e) => cats[e.category] || cats.autre;
+  const seg = (id, icon, label, n) => `<button class="${E.sub === id ? 'active' : ''}" data-action="ev-sub" data-sub="${id}"><span class="seg-ic">${icon}</span><span>${label} <small>${n}</small></span></button>`;
   let body;
   if (E.sub === 'pieces') {
-    body = `<button class="btn primary block" data-action="ev-add">${I.plus} Ajouter une preuve</button>
-      <div style="height:12px"></div>
-      ${B.evidence.length ? B.evidence.map((e) => `<div class="ev-item"><div class="thumb">${e.mime.startsWith('image/') ? `<img src="/api/evidence/file/${e.id}?t=${encodeURIComponent(S.token)}" alt="">` : (cats[e.category] || cats.autre).icon}</div>
-        <div class="info"><div class="cat">${(cats[e.category] || cats.autre).icon} ${esc((cats[e.category] || cats.autre).label)}</div><div class="nm">${esc(e.note || e.name)}</div><div class="dt">Déposé le ${fmtDate(e.added_at)} · ${(e.size / 1024).toFixed(0)} Ko</div><div class="hash">SHA-256 ${e.sha256.slice(0, 16)}…</div></div>
-        <button class="icon-btn del" data-action="ev-del" data-id="${e.id}">${I.trash}</button></div>`).join('')
-      : `<div class="empty"><div class="em">🗂️</div>Photos de blessures, captures d'écran de messages, documents : chaque pièce est horodatée et reçoit une empreinte numérique.</div>`}`;
+    body = `<button class="btn primary block big-btn" data-action="ev-add">📷 Ajouter une photo ou un fichier</button>
+      ${B.evidence.length ? B.evidence.map((e) => `<div class="ev-item">
+        <div class="thumb">${e.mime.startsWith('image/') ? `<img src="/api/evidence/file/${esc(e.id)}?t=${encodeURIComponent(S.token)}" alt="">` : catOf(e).icon}</div>
+        <div class="info"><div class="nm">${catOf(e).icon} ${esc(e.note || catOf(e).label)}</div><div class="dt">📅 ${esc(fmtDay(e.added_at))}</div></div>
+        <button class="icon-btn del" data-action="ev-del" data-id="${esc(e.id)}" title="Effacer">${I.trash}</button></div>`).join('')
+      : `<div class="ev-empty"><b>Le coffre est vide.</b><p>Vous pouvez garder ici :</p>
+          <div class="ev-examples">${['blessure', 'message', 'degats', 'document'].map((id) => `<span>${cats[id].icon} ${esc(cats[id].label.toLowerCase())}</span>`).join('')}</div></div>`}`;
   } else if (E.sub === 'journal') {
-    body = `<div class="card"><div class="field"><label>Que s'est-il passé ?</label><textarea data-input="jtext" placeholder="Décrivez les faits : quoi, où, qui était présent…">${esc(E.jtext)}</textarea></div>
-      <div class="field"><label>Date et heure des faits</label><input type="datetime-local" data-input="jdate" value="${esc(E.jdate || localDT())}"></div>
-      <button class="btn primary block" data-action="journal-add" ${E.busy ? 'disabled' : ''}>Ajouter à la chronologie</button></div>
-      ${B.journal.length ? B.journal.map((j) => `<div class="journal-entry"><div class="row between"><span class="dt">Faits du ${fmtDate(j.occurred)}</span><button class="icon-btn del" style="width:30px;height:30px" data-action="journal-del" data-id="${j.id}">${I.trash}</button></div><p>${esc(j.text)}</p><div class="rec">Noté le ${fmtDate(j.recorded)} (horodatage automatique)</div></div>`).join('')
-      : `<div class="empty"><div class="em">📝</div>Une chronologie précise est très utile pour une plainte ou une demande de protection.</div>`}`;
+    body = `<div class="card">
+        <p class="ev-help">Écrivez ce qui s'est passé, avec vos mots. Même court. Les fautes, ce n'est pas grave.</p>
+        <div class="ev-prompts"><span>❓ Quoi ?</span><span>📍 Où ?</span><span>👀 Qui a vu ?</span></div>
+        <div class="field"><label>📝 Qu'est-ce qui s'est passé ?</label><textarea data-input="jtext">${esc(E.jtext)}</textarea></div>
+        <div class="field"><label>📅 Quand ?</label><input type="datetime-local" data-input="jdate" value="${esc(E.jdate || localDT())}"></div>
+        <button class="btn primary block big-btn" style="margin:0" data-action="journal-add" ${E.busy ? 'disabled' : ''}>✓ Enregistrer</button></div>
+      ${B.journal.length ? `<div class="section-title">Déjà écrit</div>${B.journal.map((j) => `<div class="journal-entry">
+        <div class="row between"><span class="dt">📅 ${esc(fmtDay(j.occurred))}</span><button class="icon-btn del" style="width:30px;height:30px" data-action="journal-del" data-id="${esc(j.id)}" title="Effacer">${I.trash}</button></div>
+        <p>${esc(j.text)}</p><div class="rec">Écrit le ${esc(fmtDate(j.recorded))}</div></div>`).join('')}` : ''}`;
   } else {
     const D = B.dossier;
-    body = `<div class="card"><div class="row between" style="margin-bottom:8px"><b>Votre dossier</b><span class="pill">${D.n_done} / ${D.n_total}</span></div>
-      <div class="progress" style="margin:0 0 12px"><i style="width:${D.n_total ? Math.round(100 * D.n_done / D.n_total) : 0}%"></i></div>
-      ${D.items.map((d) => `<div class="check-item"><div class="box ${d.done ? 'on' : ''}">${d.done ? I.check : ''}</div><div><b>${esc(d.label)}</b><p>${esc(d.detail)}</p>${d.manual ? '<p class="tiny">À rassembler vous-même (hors application).</p>' : ''}</div></div>`).join('')}</div>
-      ${B.last_result ? '' : '<p class="small muted">Faites le questionnaire pour obtenir la liste des pièces adaptée à votre situation.</p>'}
-      <button class="btn primary block" data-action="ev-export">${I.download} Exporter le dossier (ZIP)</button>
-      <p class="tiny muted" style="text-align:center;margin-top:10px">Le ZIP contient les pièces renommées, un index avec les empreintes SHA-256 et la chronologie : prêt à remettre à un·e avocat·e ou au Centre LAVI.</p>`;
+    const actions = (d) => {
+      const btns = [];
+      if (d.contact) btns.push(`<button class="btn soft sm" data-action="call" data-id="${esc(d.contact)}">📞 Appeler</button>`);
+      if (d.category === 'journal') btns.push(`<button class="btn soft sm" data-action="goto" data-goto="journal">📝 Écrire</button>`);
+      else if (d.category) btns.push(`<button class="btn soft sm" data-action="goto" data-goto="evidence" data-cat="${esc(d.category)}">📷 Ajouter</button>`);
+      return btns.length ? `<div class="row">${btns.join('')}</div>` : '<p class="tiny">À faire vous-même, en dehors d\'Abri.</p>';
+    };
+    body = `<p class="ev-help">Pour porter plainte, ces choses aident. <b>${D.n_done} sur ${D.n_total}</b> sont prêtes.</p>
+      <div class="progress" style="margin:0 0 14px"><i style="width:${D.n_total ? Math.round(100 * D.n_done / D.n_total) : 0}%"></i></div>
+      ${D.items.map((d) => `<div class="list-item ${d.done ? 'done' : ''}"><span class="li-ic">${d.done ? '✅' : esc(d.icon || '•')}</span>
+        <div><b>${esc(d.label)}</b><p>${esc(d.detail)}</p>${d.done ? '' : actions(d)}</div></div>`).join('')}
+      ${B.last_result ? '' : '<p class="small muted">Faites « Ma situation » pour avoir une liste faite pour vous.</p>'}
+      <div class="card ev-export"><b>📦 Tout donner à un avocat ou au Centre LAVI</b>
+        <p>Un seul fichier avec vos photos, vos papiers et ce que vous avez écrit.</p>
+        <button class="btn primary block" data-action="ev-export">⬇️ Télécharger le fichier</button>
+        <p class="tiny muted">⚠️ Le fichier va dans les téléchargements du téléphone. Après l'avoir donné, effacez-le.</p></div>`;
   }
-  return `<div class="fade-in"><div class="page-title">Coffre à preuves</div><p class="page-sub">${I.lock} Chaque pièce est horodatée et reçoit une empreinte SHA-256 : on peut prouver qu'elle n'a pas été modifiée.</p>
-    <div class="segmented">${seg('pieces', `Pièces (${B.evidence.length})`)}${seg('journal', `Journal (${B.journal.length})`)}${seg('dossier', `Dossier ${B.dossier.n_done}/${B.dossier.n_total}`)}</div>${body}</div>`;
+  return `<div class="fade-in"><div class="page-title">🔒 Mon coffre</div><p class="page-sub">Gardez ici ce qui montre ce que vous vivez. C'est caché dans Abri.</p>
+    <div class="segmented ev-tabs">${seg('pieces', '📷', 'Photos', B.evidence.length)}${seg('journal', '📝', 'Écrire', B.journal.length)}${seg('dossier', '✅', 'Ma liste', `${B.dossier.n_done}/${B.dossier.n_total}`)}</div>${body}</div>`;
 }
 
 async function refreshEvidence() {
@@ -584,21 +909,21 @@ async function refreshEvidence() {
 
 async function submitEvidence() {
   const E = S.ev;
-  if (!E.file) { toast('Choisissez un fichier'); return; }
+  if (!E.file) { toast('Choisissez d\'abord une photo ou un fichier'); return; }
   E.busy = true; renderOverlay();
   const form = new FormData(); form.append('file', E.file); form.append('category', E.cat); form.append('note', E.note);
   try { await api('/api/evidence', { method: 'POST', form }); await refreshEvidence(); }
   catch (e) { toast(e.message); E.busy = false; renderOverlay(); return; }
   E.busy = false; E.file = null; E.note = ''; S.overlay = null;
-  render(); toast('Preuve ajoutée au coffre');
+  render(); toast('✓ C\'est dans le coffre');
 }
 
 async function submitJournal() {
-  const E = S.ev; if (!E.jtext.trim()) { toast('Décrivez les faits'); return; }
+  const E = S.ev; if (!E.jtext.trim()) { toast('Écrivez ce qui s\'est passé'); return; }
   E.busy = true; render();
   try { await api('/api/journal', { method: 'POST', body: { text: E.jtext, occurred: E.jdate || localDT() } }); await refreshEvidence(); }
-  catch (e) { toast(e.message); }
-  E.busy = false; E.jtext = ''; E.jdate = ''; render(); toast('Ajouté à la chronologie');
+  catch (e) { toast(e.message); E.busy = false; render(); return; }   // on garde le texte pour réessayer
+  E.busy = false; E.jtext = ''; E.jdate = ''; render(); toast('✓ C\'est noté');
 }
 
 // --- 4d. Contacts ----------------------------------------------------------
@@ -660,23 +985,41 @@ function renderOverlay() {
   }
   if (O.type === 'evidence') {
     const E = S.ev;
-    overlaysEl.innerHTML = `<div class="overlay dim" data-action="overlay-close"><div class="sheet" data-stop><div class="grip"></div><h3>Ajouter une preuve</h3>
-      <div class="field"><label>Type de pièce</label></div>
-      <div class="cat-grid">${S.boot.evidence_categories.map((c) => `<button class="${E.cat === c.id ? 'on' : ''}" data-action="ev-cat" data-cat="${c.id}"><span class="em">${c.icon}</span>${esc(c.label)}</button>`).join('')}</div>
-      <div class="field"><label>Fichier</label><div class="file-drop ${E.file ? 'has' : ''}">${E.file ? `📎 ${esc(E.file.name)}` : `${I.camera}<br>Photo, capture d'écran, PDF, audio…`}<input type="file" data-input="ev-file" accept="image/*,audio/*,video/*,application/pdf,.doc,.docx,.txt"></div></div>
-      <div class="field"><label>Note (facultatif)</label><input data-input="ev-note" placeholder="Ex. : bras gauche, après la dispute du soir" value="${esc(E.note)}"></div>
-      <button class="btn primary block" data-action="ev-submit" ${E.busy ? 'disabled' : ''}>${E.busy ? 'Chiffrement et dépôt…' : 'Déposer dans le coffre'}</button></div></div>`;
+    // Trois étapes numérotées, une question à la fois
+    const step = (n, text, extra = '') => `<div class="step"><span class="step-n">${n}</span><b>${text}</b>${extra}</div>`;
+    overlaysEl.innerHTML = `<div class="overlay dim" data-action="overlay-close"><div class="sheet" data-stop><div class="grip"></div><h3>📷 Ajouter au coffre</h3>
+      ${step(1, 'Qu\'est-ce que c\'est ?')}
+      <div class="cat-grid">${S.boot.evidence_categories.map((c) => `<button class="${E.cat === c.id ? 'on' : ''}" data-action="ev-cat" data-cat="${esc(c.id)}"><span class="em">${c.icon}</span>${esc(c.label)}</button>`).join('')}</div>
+      ${step(2, 'Choisissez la photo ou le fichier')}
+      <div class="file-drop ${E.file ? 'has' : ''}">${E.file ? `✅ ${esc(E.file.name)}` : `${I.camera}<br>Touchez ici`}<input type="file" data-input="ev-file" accept="image/*,audio/*,video/*,application/pdf,.doc,.docx,.txt"></div>
+      ${step(3, 'Un petit mot ?', ' <span class="small muted">(pas obligatoire)</span>')}
+      <div class="field"><input data-input="ev-note" placeholder="Ex. : mon bras, lundi soir" value="${esc(E.note)}"></div>
+      <button class="btn primary block big-btn" style="margin:0" data-action="ev-submit" ${E.busy ? 'disabled' : ''}>${E.busy ? 'Un instant…' : '🔒 Mettre dans le coffre'}</button></div></div>`;
     return;
   }
   if (O.type === 'settings') {
     const cfg = S.boot.config;
     overlaysEl.innerHTML = `<div class="overlay dim" data-action="overlay-close"><div class="sheet" data-stop><div class="grip"></div><h3>Réglages</h3>
-      <div class="settings-row"><div><b>Accès secret</b><span>${cfg.recipe.emoji} ${esc(cfg.recipe.name)} · ${cfg.persons} personne${cfg.persons > 1 ? 's' : ''}</span></div><button class="btn soft sm" data-action="settings-change">Modifier</button></div>
-      <div class="settings-row"><div><b>Verrouillage automatique</b><span>Retour à Petits Plats après 3 min d'inactivité</span></div></div>
-      <div class="settings-row"><div><b>Sortie rapide</b><span>Bouton « Quitter » ou touche Échap : retour immédiat à l'app de cuisine</span></div></div>
+      <div class="settings-row col"><div><b>Apparence de l'app</b><span>Ce que l'on voit en ouvrant l'app.</span></div>
+        <div class="cat-grid front-pick">${[['recettes', '🍳', 'Recettes'], ['wiki', '📖', 'Wikipédia']].map(([id, em, label]) => `<button class="${S.front === id ? 'on' : ''}" data-action="front-set" data-front="${id}"><span class="em">${em}</span>${label}</button>`).join('')}</div></div>
+      ${S.front === 'wiki'
+        ? `<div class="settings-row"><div><b>Mot secret</b><span>Pour ouvrir Abri : tapez-le dans la recherche de Wikipédia, puis Entrée.</span></div><button class="btn soft sm" data-action="phrase-edit">Modifier</button></div>`
+        : `<div class="settings-row"><div><b>Accès secret</b><span>${cfg.recipe.emoji} ${esc(cfg.recipe.name)} · ${cfg.persons} personne${cfg.persons > 1 ? 's' : ''}</span></div><button class="btn soft sm" data-action="settings-change">Modifier</button></div>`}
+      ${Object.entries(S.boot.features || {}).map(([key, f]) => `<div class="settings-row"><div><b>${esc(f.label)} <span class="pill" style="font-size:10px;padding:2px 7px">À venir</span></b><span>${esc(f.desc)}</span></div><button class="switch ${S.boot.prefs[key] ? 'on' : ''}" data-action="pref-toggle" data-key="${esc(key)}"></button></div>`).join('')}
+      <div class="settings-row"><div><b>Verrouillage automatique</b><span>Retour à ${S.front === 'wiki' ? 'Wikipédia' : 'Petits Plats'} après 3 min d'inactivité</span></div></div>
+      <div class="settings-row"><div><b>Sortie rapide</b><span>Bouton « Quitter » ou touche Échap : retour immédiat à ${S.front === 'wiki' ? 'Wikipédia' : 'l\'app de cuisine'}</span></div></div>
       <div class="settings-row"><div><b>Verrouiller maintenant</b><span>Ferme l'espace protégé</span></div><button class="btn muted sm" data-action="quick-exit">${I.lock} Verrouiller</button></div>
       <div class="settings-row"><div><b>Réinitialiser la démo</b><span>Efface le code secret, les preuves et le journal</span></div><button class="btn danger sm" data-action="reset-ask">Réinitialiser</button></div>
       <p class="tiny muted" style="margin-top:12px">Source du questionnaire et du réseau d'aide : canton de Vaud (vd.ch).</p></div></div>`;
+    return;
+  }
+  if (O.type === 'phrase') {
+    overlaysEl.innerHTML = `<div class="overlay dim" data-action="overlay-close"><div class="sheet" data-stop><div class="grip"></div><h3>📖 Apparence Wikipédia</h3>
+      <p class="ev-help">L'app ressemblera à Wikipédia. Pour ouvrir Abri, vous taperez un <b>mot secret</b> dans la recherche, puis Entrée.</p>
+      <div class="field"><label>Votre mot secret</label><input data-input="phrase" value="${esc(O.phrase)}" placeholder="Ex. : girafe bleue 42" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+      <p class="small muted" style="margin:-4px 0 14px">Choisissez des mots que personne ne chercherait. Au moins 4 lettres ou chiffres. Les majuscules et les accents ne comptent pas.</p>
+      <button class="btn primary block big-btn" data-action="phrase-save" ${O.busy ? 'disabled' : ''}>${O.busy ? 'Un instant…' : '✓ Enregistrer'}</button>
+      <button class="btn muted block" data-action="settings">Annuler</button></div></div>`;
     return;
   }
   if (O.type === 'confirm') {
@@ -711,6 +1054,13 @@ const actions = {
   'setup-inc': () => { S.setup.persons = Math.min(S.personsMax, S.setup.persons + 1); render(); },
   'setup-dec': () => { S.setup.persons = Math.max(S.personsMin, S.setup.persons - 1); render(); },
   'setup-finish': setupFinish,
+  // — page Wikipédia
+  'wiki-menu': () => { S.wiki.menu = !S.wiki.menu; render(); },
+  'wiki-search': () => { Object.assign(S.wiki, { menu: false, search: true, q: '', results: [], searched: '' }); render(); },
+  'wiki-search-close': () => { S.wiki.search = false; render(); },
+  'wiki-go': (d) => wikiOpen(d.id),
+  'wiki-random': wikiRandom,
+  'wiki-sec': (d) => { S.wiki.open[d.i] = !S.wiki.open[d.i]; render(); },
   // — app de cuisine
   'cover-tab': (d) => { S.cover.tab = d.tab; S.cover.recipe = null; S.cover.confirmClear = false; render(); },
   'cover-cat': (d) => { S.cover.cat = d.cat; render(); },
@@ -731,12 +1081,41 @@ const actions = {
   'profile-toggle': (d) => { S.cover.profile[d.k] = !S.cover.profile[d.k]; render(); },
   // — espace protégé
   'tab': (d) => { S.tab = d.tab; render(); },
+  'office-show': (d) => selectOffice(d.id, true),
+  'office-close': () => { S.home.selected = null; S.home.refit = true; render(); },
+  'office-list': () => { S.home.list = !S.home.list; render(); },
+  'call-office': (d) => openOfficeCall(d.id),
   'quick-exit': () => lock(true),
   'settings': () => { S.overlay = { type: 'settings' }; renderOverlay(); },
   'settings-change': () => { S.overlay = null; S.setup = { step: 0, recipe: S.boot.config.recipe_id, persons: S.boot.config.persons, fromSettings: true }; S.mode = 'setup'; render(); },
+  // Placeholder : la préférence est mémorisée mais n'active aucune fonctionnalité (voir logic.FEATURES)
+  'front-set': async (d) => {
+    if (d.front === S.front) return;
+    if (d.front === 'wiki') { S.overlay = { type: 'phrase', phrase: '', busy: false }; renderOverlay(); return; }
+    try { S.front = (await api('/api/app/front', { method: 'POST', body: { front: d.front } })).front; }
+    catch (e) { toast(e.message); return; }
+    setIdentity(); renderOverlay(); toast('✓ En quittant Abri, l\'app ressemblera aux recettes');
+  },
+  'phrase-edit': () => { S.overlay = { type: 'phrase', phrase: '', busy: false }; renderOverlay(); },
+  'phrase-save': async () => {
+    const O = S.overlay;
+    if (norm(O.phrase).replace(/ /g, '').length < 4) { toast('Au moins 4 lettres ou chiffres'); return; }
+    O.busy = true; renderOverlay();
+    try { S.front = (await api('/api/app/front', { method: 'POST', body: { front: 'wiki', phrase: O.phrase } })).front; }
+    catch (e) { O.busy = false; renderOverlay(); toast(e.message); return; }
+    S.overlay = { type: 'settings' }; setIdentity(); renderOverlay();
+    toast('✓ Enregistré. En quittant Abri, l\'app ressemblera à Wikipédia');
+  },
+  'pref-toggle': async (d) => {
+    const on = !S.boot.prefs[d.key];
+    try { S.boot.prefs = (await api('/api/app/pref', { method: 'POST', body: { key: d.key, value: on } })).prefs; }
+    catch (e) { toast(e.message); return; }
+    renderOverlay();
+    toast(on ? 'Enregistré — fonctionnalité pas encore disponible' : 'Désactivé');
+  },
   'reset-ask': () => confirmBox('Réinitialiser la démo ?', 'Le code secret, les preuves, le journal et les résultats seront effacés. L\'application repartira du premier lancement.', 'Tout effacer', async () => {
     try { await api('/api/app/reset', { method: 'POST' }); } catch (e) { /* le jeton est déjà invalide */ }
-    S.token = null; S.boot = null; S.overlay = null; S.setup = { step: 0, recipe: null, persons: 4, fromSettings: false };
+    S.token = null; S.boot = null; S.overlay = null; S.front = 'recettes'; S.setup = { step: 0, recipe: null, persons: 4, fromSettings: false };
     S.mode = 'setup'; render(); toast('Démo réinitialisée'); }, true),
   'confirm-ok': () => { const fn = S.overlay && S.overlay.onOk; S.overlay = null; renderOverlay(); if (fn) fn(); },
   'overlay-close': () => { S.overlay = null; renderOverlay(); },
@@ -768,6 +1147,7 @@ const actions = {
   },
   // — localisation
   'scan': startScan,
+  'loc-platform': (d) => { S.loc.platform = d.platform; render(); },
   'audit-open': (d) => { S.loc.open[d.item] = !S.loc.open[d.item]; render(); },
   'audit-toggle': (d) => toggleAudit(d.item),
   'audit-goto': (d) => { S.loc.open[d.item] = true; render(); const el = $(`#audit-${d.item}`, screen); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); },
@@ -776,17 +1156,21 @@ const actions = {
   'ev-add': () => { S.ev.file = null; S.overlay = { type: 'evidence' }; renderOverlay(); },
   'ev-cat': (d) => { S.ev.cat = d.cat; renderOverlay(); },
   'ev-submit': submitEvidence,
-  'ev-del': (d) => confirmBox('Supprimer cette pièce ?', 'Elle sera définitivement retirée du coffre.', 'Supprimer', async () => {
+  'ev-del': (d) => confirmBox('Effacer ceci ?', 'Ce sera effacé pour toujours.', 'Effacer', async () => {
     try { await api(`/api/evidence/${d.id}`, { method: 'DELETE' }); await refreshEvidence(); render(); } catch (e) { toast(e.message); } }, true),
-  'ev-export': () => { const a = document.createElement('a'); a.href = `/api/evidence/export?t=${encodeURIComponent(S.token)}`; a.download = ''; document.body.appendChild(a); a.click(); a.remove(); toast('Dossier exporté'); },
+  'ev-export': () => { const a = document.createElement('a'); a.href = `/api/evidence/export?t=${encodeURIComponent(S.token)}`; a.download = ''; document.body.appendChild(a); a.click(); a.remove(); toast('⬇️ Fichier téléchargé'); },
   'journal-add': submitJournal,
-  'journal-del': (d) => confirmBox('Supprimer cette entrée ?', 'Elle sera retirée de la chronologie.', 'Supprimer', async () => {
+  'journal-del': (d) => confirmBox('Effacer ce texte ?', 'Il sera effacé pour toujours.', 'Effacer', async () => {
     try { await api(`/api/journal/${d.id}`, { method: 'DELETE' }); await refreshEvidence(); render(); } catch (e) { toast(e.message); } }, true),
   // — contacts
   'axis-toggle': (d) => { S.contacts.open[d.axis] = S.contacts.open[d.axis] === false; render(); },
 };
 
 const inputs = {
+  'wiki-q': (el) => { S.wiki.q = el.value; clearTimeout(wikiTimer);
+    if (!norm(el.value)) { S.wiki.results = []; paintWikiResults(); return; }
+    wikiTimer = setTimeout(() => wikiSearch(el.value), 200); },
+  'phrase': (el) => { if (S.overlay) S.overlay.phrase = el.value; },
   'cover-search': (el) => { S.cover.query = el.value; refreshGrid(); },
   'persons': (el) => { const v = parseInt(el.value, 10); if (!isNaN(v)) { S.cover.persons = Math.max(S.personsMin, Math.min(S.personsMax, v)); } },
   'jtext': (el) => { S.ev.jtext = el.value; },
@@ -814,6 +1198,11 @@ screen.addEventListener('input', onInput);
 overlaysEl.addEventListener('input', onInput);
 overlaysEl.addEventListener('change', onInput);
 ['click', 'keydown', 'touchstart', 'input'].forEach((ev) => document.addEventListener(ev, () => { if (S.mode === 'app') resetIdle(); }, { passive: true }));
+// Recherche Wikipédia : Entrée valide (article, ou Abri si c'est le mot secret)
+screen.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || !e.target.matches('.wk-input')) return;
+  e.preventDefault(); wikiSubmit(e.target.value);
+});
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { if (S.overlay) { S.overlay = null; renderOverlay(); } else if (S.mode === 'app') lock(true); }
 });
@@ -827,11 +1216,12 @@ async function boot() {
     const [rec, st] = await Promise.all([api('/api/cover/recipes'), api('/api/setup/status')]);
     S.recipes = rec.recipes; S.daily = rec.daily; S.categories = rec.categories;
     S.personsMin = st.persons_min; S.personsMax = st.persons_max;
-    S.mode = st.configured ? 'cover' : 'setup';
+    S.front = st.front || 'recettes';
+    S.mode = !st.configured ? 'setup' : S.front === 'wiki' ? 'wiki' : 'cover';
   } catch (e) {
     screen.innerHTML = `<div class="empty">Impossible de joindre le serveur.<br><span class="small">Lancez <code>python app.py</code></span></div>`;
     return;
   }
-  render();
+  if (S.mode === 'wiki') wikiOpen(WIKI_HOME); else render();
 }
 boot();

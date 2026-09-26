@@ -21,6 +21,7 @@ from flask import Flask, abort, jsonify, render_template, request, send_file
 
 import content as C
 import logic as L
+import wikimirror as W
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 Mo par fichier
@@ -60,13 +61,18 @@ def _bad_request(e):
 
 @app.get("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", wiki=L.get_front() == "wiki")
 
 
 @app.get("/manifest.json")
 def manifest():
     # Sur iPhone/Android, « Ajouter à l'écran d'accueil » installe l'app sous
     # l'identité de l'application de cuisine.
+    # L'apparence choisie dans Abri décide du nom et de l'icône de l'app installée.
+    if L.get_front() == "wiki":
+        return jsonify({"name": "Wikipédia", "short_name": "Wikipédia", "start_url": "/",
+                        "display": "standalone", "background_color": "#ffffff", "theme_color": "#ffffff",
+                        "icons": [{"src": "/static/icon-wiki.svg", "sizes": "any", "type": "image/svg+xml"}]})
     return jsonify({
         "name": "Petits Plats",
         "short_name": "Petits Plats",
@@ -115,13 +121,61 @@ def cover_adapt():
 
 
 # ---------------------------------------------------------------------------
+# Apparence « Wikipédia » (publique) : miroir de fr.wikipedia.org
+# ---------------------------------------------------------------------------
+
+@app.post("/api/wiki/search")
+def wiki_search():
+    """
+    Comportement visible : suggestions de titres, comme la recherche de Wikipédia.
+    Comportement caché   : validée avec Entrée (submit) et égale au mot secret → jeton.
+    POST pour que la recherche n'apparaisse pas dans le journal du serveur.
+    """
+    data = request.get_json(silent=True) or {}
+    q = str(data.get("q", ""))
+    payload = {"q": q}
+    if data.get("submit") and L.check_wiki_unlock(q):
+        token = L.new_token()
+        _sessions.add(token)
+        return jsonify({**payload, "token": token, "results": []})
+    try:
+        payload["results"] = W.search(q)
+    except W.MirrorOffline:
+        payload.update(results=[], offline=True)
+    return jsonify(payload)
+
+
+@app.get("/api/wiki/page")
+def wiki_page():
+    try:
+        return jsonify(W.page(request.args.get("title", "")))
+    except W.MirrorOffline:
+        return jsonify({"offline": True}), 503
+    except LookupError as e:
+        abort(404, str(e))
+
+
+@app.get("/api/wiki/random")
+def wiki_random():
+    try:
+        return jsonify({"title": W.random_title()})
+    except W.MirrorOffline:
+        return jsonify({"offline": True}), 503
+
+
+@app.errorhandler(404)
+def _not_found(e):
+    return jsonify({"error": str(getattr(e, "description", "introuvable"))}), 404
+
+
+# ---------------------------------------------------------------------------
 # Configuration initiale (premier lancement) — ou modification depuis l'espace protégé
 # ---------------------------------------------------------------------------
 
 @app.get("/api/setup/status")
 def setup_status():
     return jsonify({"configured": L.is_configured(), "persons_min": L.PERSONS_MIN,
-                    "persons_max": L.PERSONS_MAX})
+                    "persons_max": L.PERSONS_MAX, "front": L.get_front()})
 
 
 @app.post("/api/setup")
@@ -152,8 +206,13 @@ def app_bootstrap():
                           "situation": C.SITUATION},
         "contacts": C.CONTACTS,
         "axes": C.AXES,
+        "offices": C.OFFICES,
+        "office_types": C.OFFICE_TYPES,
         "vaud_url": C.VAUD_URL,
         "evidence_categories": C.EVIDENCE_CATEGORIES,
+        "features": L.FEATURES,
+        "front": L.get_front(),
+        "prefs": L.get_prefs(),
         "last_result": L.last_result(),
         "audit": L.get_audit_state(),
         "evidence": L.list_evidence(),
@@ -167,6 +226,28 @@ def app_bootstrap():
 def app_lock():
     _sessions.discard(_token_from_request())
     return jsonify({"ok": True})
+
+
+@app.post("/api/app/pref")
+@protected
+def app_pref():
+    """Mémorise une préférence (placeholder : n'active aucune fonctionnalité réelle)."""
+    data = request.get_json(silent=True) or {}
+    try:
+        return jsonify({"prefs": L.set_pref(data.get("key", ""), data.get("value", False))})
+    except ValueError as e:
+        abort(400, str(e))
+
+
+@app.post("/api/app/front")
+@protected
+def app_front():
+    """Choisit l'apparence de l'app : recettes ou Wikipédia (+ mot secret)."""
+    data = request.get_json(silent=True) or {}
+    try:
+        return jsonify({"front": L.set_front(data.get("front", ""), data.get("phrase"))})
+    except ValueError as e:
+        abort(400, str(e))
 
 
 # --- Questionnaire ---------------------------------------------------------

@@ -11,12 +11,15 @@ logic.py — La logique du prototype Abri (sans Flask, testable seule).
 from __future__ import annotations
 
 import hashlib
+import hmac
 import io
 import json
 import math
 import mimetypes
 import os
+import re
 import secrets
+import unicodedata
 import uuid
 import zipfile
 from datetime import date, datetime
@@ -34,6 +37,7 @@ EVIDENCE_INDEX = STORAGE_DIR / "evidence.json"
 JOURNAL_FILE = STORAGE_DIR / "journal.json"
 AUDIT_FILE = STORAGE_DIR / "location_audit.json"
 RESULT_FILE = STORAGE_DIR / "last_result.json"
+PREFS_FILE = STORAGE_DIR / "prefs.json"
 
 PERSONS_MIN, PERSONS_MAX = 1, 12
 
@@ -91,14 +95,124 @@ def set_config(recipe_id: str, persons: int) -> dict:
     if not PERSONS_MIN <= persons <= PERSONS_MAX:
         raise ValueError(f"Le nombre de personnes doit être entre {PERSONS_MIN} et {PERSONS_MAX}")
     cfg = {"recipe_id": recipe_id, "persons": persons, "created": now_iso()}
+    old = get_config() or {}
+    if old.get("wiki_phrase"):          # changer la recette ne doit pas effacer le mot secret
+        cfg["wiki_phrase"] = old["wiki_phrase"]
     _write_json(CONFIG_FILE, cfg)
     return cfg
+
+
+# ---------------------------------------------------------------------------
+# Préférences de l'espace protégé
+# ---------------------------------------------------------------------------
+#
+# PLACEHOLDER — « Enregistrement d'urgence » (triple tap → capture vidéo 10 min → coffre).
+#
+# Cette préférence n'est qu'un INTERRUPTEUR mémorisé : rien n'enregistre quoi que ce soit.
+# Le geste triple-tap, la caméra et l'ajout au coffre NE SONT PAS implémentés. Ce champ
+# existe pour qu'un·e développeur·se puisse brancher une vraie implémentation plus tard, en
+# connaissance de cause :
+#
+#   • Techniquement infaisable en web : un navigateur coupe la caméra dès que l'onglet passe
+#     en arrière-plan ou que l'écran se verrouille. « Enregistrer 10 min sans que l'app soit
+#     visible » suppose une vraie application native (Android/iOS) avec permissions caméra.
+#   • Cadre légal (Suisse) : enregistrer une CONVERSATION à l'insu des participants est punissable
+#     (art. 179bis/ter CP). Documenter une agression subie est une pratique reconnue, mais la
+#     limite est réelle : à faire valider par un·e juriste (LAVI, avocat·e) avant toute diffusion.
+#   • Sécurité : un enregistreur caché « toujours armé » sur un téléphone surveillé est
+#     précisément ce contre quoi l'onglet Localisation met en garde. À n'activer qu'en connaissance
+#     du risque, et jamais par défaut.
+#
+# Tant que ces trois points ne sont pas traités, l'interface présente l'option comme « à venir ».
+FEATURES = {
+    "emergency_recording": {
+        "label": "Enregistrement d'urgence",
+        "desc": "Trois tapes sur l'écran lancent une capture vidéo de 10 min, déposée dans le coffre.",
+        "status": "placeholder",   # 'placeholder' = mémorisé mais non fonctionnel (voir ci-dessus)
+        "default": False,
+    },
+}
+
+
+def get_prefs() -> dict:
+    """Préférences enregistrées, complétées par les valeurs par défaut de chaque option."""
+    saved = _read_json(PREFS_FILE, {})
+    return {key: bool(saved.get(key, f["default"])) for key, f in FEATURES.items()}
+
+
+def set_pref(key: str, value: bool) -> dict:
+    if key not in FEATURES:
+        raise ValueError("Option inconnue")
+    saved = _read_json(PREFS_FILE, {})
+    saved[key] = bool(value)
+    _write_json(PREFS_FILE, saved)
+    return get_prefs()
+
+
+# ---------------------------------------------------------------------------
+# Apparence de l'app : application de recettes OU miroir de Wikipédia (Réglages d'Abri)
+# ---------------------------------------------------------------------------
+# Chaque apparence a son propre secret, et seul celui de l'apparence active ouvre Abri :
+#   • recettes : la bonne recette + le bon nombre de personnes (« Adapter les quantités ») ;
+#   • wiki     : un mot secret tapé dans la recherche (validé avec Entrée).
+# Le mot secret n'est gardé que sous forme d'empreinte (config.json → wiki_phrase) : il
+# n'apparaît pas en clair si quelqu'un ouvre le fichier. Une empreinte d'un mot court se
+# retrouve toutefois par essais : c'est un camouflage, pas un coffre-fort.
+FRONTS = ("recettes", "wiki")
+WIKI_PHRASE_MIN = 4
+
+
+def get_front() -> str:
+    front = _read_json(PREFS_FILE, {}).get("front", "recettes")
+    return front if front in FRONTS and (front != "wiki" or _wiki_phrase()) else "recettes"
+
+
+def _wiki_phrase() -> str | None:
+    return (get_config() or {}).get("wiki_phrase")
+
+
+def _norm_phrase(text) -> str:
+    """« Girafe  Bleue » = « girafe bleue » = « GIRAFÉ bleue » : casse, accents et espaces ignorés."""
+    text = "".join(c for c in unicodedata.normalize("NFD", str(text or "")) if not unicodedata.combining(c))
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", text.lower()).split())
+
+
+def _hash_phrase(text) -> str:
+    return hashlib.sha256(f"abri-wiki|{_norm_phrase(text)}".encode()).hexdigest()
+
+
+def set_front(front: str, phrase: str | None = None) -> str:
+    if front not in FRONTS:
+        raise ValueError("Apparence inconnue")
+    cfg = get_config()
+    if cfg is None:
+        raise ValueError("L'accès secret n'est pas encore configuré")
+    if front == "wiki":
+        if phrase:
+            if len(_norm_phrase(phrase).replace(" ", "")) < WIKI_PHRASE_MIN:
+                raise ValueError(f"Le mot secret doit avoir au moins {WIKI_PHRASE_MIN} lettres ou chiffres")
+            cfg["wiki_phrase"] = _hash_phrase(phrase)
+            _write_json(CONFIG_FILE, cfg)
+        elif not cfg.get("wiki_phrase"):
+            raise ValueError("Choisissez d'abord un mot secret")
+    saved = _read_json(PREFS_FILE, {})
+    saved["front"] = front
+    _write_json(PREFS_FILE, saved)
+    return get_front()
+
+
+def check_wiki_unlock(query) -> bool:
+    """Vrai si l'apparence Wikipédia est active et que la recherche est le mot secret."""
+    stored = _wiki_phrase()
+    if get_front() != "wiki" or not stored or not _norm_phrase(query):
+        return False
+    return hmac.compare_digest(_hash_phrase(query), stored)
 
 
 def check_unlock(recipe_id: str, persons) -> bool:
     """Vrai si (recette, nombre de personnes) correspond au secret configuré."""
     cfg = get_config()
-    if cfg is None:
+    if cfg is None or get_front() != "recettes":
         return False
     try:
         persons = int(persons)
@@ -211,7 +325,7 @@ LEVELS = {
         "color": "#2e9e5b",
         "headline": "Aucune situation de violence n'a été identifiée dans vos réponses.",
         "text": "Si un doute persiste, des ressources existent. Vous pouvez aussi vérifier que personne "
-                "ne suit votre position avec l'auto-audit de localisation.",
+                "ne suit votre position, dans l'onglet Localisation.",
     },
 }
 
@@ -247,7 +361,7 @@ ACTIONS = {
         {"icon": "⚖️", "title": "Connaître vos droits", "text": "Un·e avocat·e peut demander des mesures de protection.", "contact": "avocats"},
     ],
     "none": [
-        {"icon": "📍", "title": "Vérifier votre localisation", "text": "L'auto-audit détecte les partages de position et les profils suspects.", "goto": "location"},
+        {"icon": "📍", "title": "Vérifier votre localisation", "text": "Assurez-vous que personne ne peut savoir où vous êtes.", "goto": "location"},
         {"icon": "💬", "title": "En parler quand même ?", "text": "violencequefaire.ch et le 142 répondent à toute question, sans jugement.", "contact": "vqf"},
     ],
 }
@@ -342,27 +456,30 @@ def evaluate(answers: dict, situation: dict | None = None) -> dict:
 
 
 def last_result() -> dict | None:
-    return _read_json(RESULT_FILE, None)
+    result = _read_json(RESULT_FILE, None)
+    if result and result.get("dossier"):
+        # Relire les pièces dans content.py : un changement de texte s'applique aussi aux anciens résultats
+        by_id = {i["id"]: i for i in C.DOSSIER_ITEMS}
+        result["dossier"] = [by_id[i["id"]] for i in result["dossier"] if i.get("id") in by_id]
+    return result
 
 
 # ---------------------------------------------------------------------------
-# Auto-audit de la localisation : progression + score
+# Localisation : les points à vérifier et ce qui est déjà fait
 # ---------------------------------------------------------------------------
 
 def get_audit_state() -> dict:
     done = _read_json(AUDIT_FILE, {})
     items = C.LOCATION_AUDIT
-    n_done = sum(1 for i in items if done.get(i["id"]))
-    weights = {"high": 3, "medium": 2, "low": 1}
-    total_w = sum(weights[i["severity"]] for i in items)
-    done_w = sum(weights[i["severity"]] for i in items if done.get(i["id"]))
     return {
+        "warning": C.LOCATION_WARNING,
         "groups": C.LOCATION_GROUPS,
         "items": items,
+        "quick": C.LOCATION_QUICK,
+        "tips": C.LOCATION_TIPS,
         "done": done,
-        "n_done": n_done,
+        "n_done": sum(1 for i in items if done.get(i["id"])),
         "n_total": len(items),
-        "score": round(100 * done_w / total_w) if total_w else 0,
     }
 
 
@@ -538,7 +655,7 @@ def export_zip() -> tuple[bytes, str]:
 # ---------------------------------------------------------------------------
 
 def reset_all() -> None:
-    for f in (CONFIG_FILE, EVIDENCE_INDEX, JOURNAL_FILE, AUDIT_FILE, RESULT_FILE):
+    for f in (CONFIG_FILE, EVIDENCE_INDEX, JOURNAL_FILE, AUDIT_FILE, RESULT_FILE, PREFS_FILE):
         if f.exists():
             f.unlink()
     if EVIDENCE_DIR.exists():

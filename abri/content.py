@@ -477,167 +477,232 @@ VAUD_URL = (
     "violence-domestique"
 )
 
+# Lieux où l'on peut se rendre, affichés sur la carte de l'accueil d'Abri.
+# Adresses vérifiées le 26.09.2026 sur les sites officiels (lavi-vaud.ch, curml.ch, ghol.ch,
+# malleyprairie.ch, vd.ch/deiep/bci, vaudfamille.ch) ; coordonnées : OpenStreetMap (Nominatim).
+# Les lieux d'hébergement non publics ne doivent jamais figurer ici : MalleyPrairie publie
+# l'adresse de son centre lausannois, pas celle de ses consultations régionales.
+# Trois couleurs seulement sur la carte : où parler, où faire constater, où porter plainte.
+OFFICE_TYPES = {
+    "aide":    {"label": "Aide et conseils", "color": "#e67e22"},
+    "medecin": {"label": "Constat médical", "color": "#2e9e5b"},
+    "police":  {"label": "Police", "color": "#1e4fb5"},
+}
+
+_LAVI_NOTE = "Conseils gratuits et confidentiels. Sur rendez-vous."
+_UMV_NOTE = "Un·e médecin constate les blessures : c'est une preuve. Sur rendez-vous, 7 jours sur 7."
+
+
+def _office(id, type, name, town, address, lat, lon, phone, note):
+    return {"id": id, "type": type, "name": name, "town": town, "address": address,
+            "lat": lat, "lon": lon, "phone": phone, "note": note}
+
+
+OFFICES = [
+    _office("lavi-lausanne", "aide", "Centre LAVI", "Lausanne", "Rue du Grand-Pont 2 bis, 1003 Lausanne",
+            46.52047, 6.63135, "021 631 03 00", _LAVI_NOTE),
+    _office("lavi-nyon", "aide", "Centre LAVI", "Nyon", "Route de l'Étraz 20A, 1260 Nyon",
+            46.38799, 6.23891, "021 631 03 02", _LAVI_NOTE),
+    _office("lavi-yverdon", "aide", "Centre LAVI", "Yverdon-les-Bains", "Rue de la Plaine 2, 1400 Yverdon-les-Bains",
+            46.77784, 6.64191, "021 631 03 08", _LAVI_NOTE),
+    _office("lavi-vevey", "aide", "Centre LAVI", "Vevey", "Avenue du Général-Guisan 30, 1800 Vevey",
+            46.46488, 6.83939, "021 631 03 06", _LAVI_NOTE),
+    _office("lavi-aigle", "aide", "Centre LAVI", "Aigle", "Rue du Molage 36, 1860 Aigle",
+            46.3193, 6.96609, "021 631 03 04", _LAVI_NOTE),
+    _office("malley", "aide", "MalleyPrairie", "Lausanne", "Chemin de la Prairie 34, 1007 Lausanne",
+            46.52371, 6.60378, "021 620 76 76",
+            "Accueil et hébergement d'urgence, 24h/24, avec vos enfants. Appelez avant de venir."),
+    _office("fraternite", "aide", "La Fraternité (CSP)", "Lausanne", "Place Arlaud 2, 1003 Lausanne",
+            46.52276, 6.63187, "021 560 60 98", "Permis de séjour et démarches pour les personnes migrantes."),
+    _office("bci", "aide", "Bureau pour l'intégration (BCI)", "Lausanne", "Avenue de Sévelin 46, 1014 Lausanne",
+            46.52287, 6.61912, "021 316 49 59", "Mariage forcé : conseil et protection."),
+    # Unité de médecine des violences (UMV) : constats médicaux
+    _office("umv-lausanne", "medecin", "CHUV", "Lausanne", "Rue du Bugnon 44, 1011 Lausanne",
+            46.52468, 6.64104, "021 314 00 60", _UMV_NOTE + " Accueil des urgences PMU."),
+    _office("umv-yverdon", "medecin", "Hôpital d'Yverdon", "Yverdon-les-Bains", "Rue d'Entremonts 11, 1400 Yverdon-les-Bains",
+            46.77136, 6.6463, "024 424 42 20", _UMV_NOTE),
+    _office("umv-nyon", "medecin", "Hôpital de Nyon", "Nyon", "Chemin Monastier 10, 1260 Nyon",
+            46.3832, 6.22751, "021 314 08 51", _UMV_NOTE),
+    _office("umv-rennaz", "medecin", "Espace Santé Rennaz", "Rennaz", "Route des Tilles 6A, 1847 Rennaz",
+            46.37792, 6.92007, "058 773 64 77", _UMV_NOTE),
+    _office("police-lausanne", "police", "Hôtel de police", "Lausanne", "Rue Saint-Martin 33, 1005 Lausanne",
+            46.52504, 6.63683, "021 315 15 15", "Ouvert 24h/24. En danger : 117."),
+    _office("police-cantonale", "police", "Police cantonale", "Le Mont-sur-Lausanne",
+            "Route de la Blécherette 101, 1052 Le Mont-sur-Lausanne",
+            46.55152, 6.62641, "021 644 44 44", "Tout poste de police peut recevoir une plainte. En danger : 117."),
+]
+
 # ---------------------------------------------------------------------------
 # 4. Auto-audit de la localisation
 # ---------------------------------------------------------------------------
 
+# Écrit pour une personne stressée, pas pour un·e informaticien·ne : phrases courtes,
+# pas de jargon, et chaque point dit POURQUOI avant de dire COMMENT.
+# « steps » est soit une liste (identique sur iPhone et Android), soit
+# {"iphone": [...], "android": [...]} ; l'interface montre ceux du téléphone choisi.
+
+# Affiché en tête de page : couper un partage peut alerter la personne.
+LOCATION_WARNING = (
+    "La personne peut remarquer qu'un partage a été coupé ou qu'une application a disparu. "
+    "Si cela peut vous mettre en danger, parlez-en d'abord au 142 : on vous aidera à choisir "
+    "le bon moment. Vous pouvez aussi tout vérifier maintenant, et ne rien changer."
+)
+
 LOCATION_GROUPS = [
-    {"id": "partage", "title": "Partage de position", "icon": "📍"},
-    {"id": "permissions", "title": "Permissions des applications", "icon": "🔐"},
-    {"id": "comptes", "title": "Comptes reliés", "icon": "👤"},
-    {"id": "appareil", "title": "Appareil et traqueurs", "icon": "📱"},
+    {"id": "voir", "title": "Qui peut voir où je suis ?", "icon": "📍"},
+    {"id": "acces", "title": "Quelqu'un a-t-il accès à mon téléphone ou à mes comptes ?", "icon": "🔑"},
+    {"id": "objets", "title": "Un objet ou une photo peut-il dire où je suis ?", "icon": "👜"},
 ]
 
 LOCATION_AUDIT = [
     {
-        "id": "findmy", "group": "partage", "severity": "high",
-        "title": "Localiser (Find My) — partage de position",
-        "risk": "Toute personne avec qui vous partagez votre position dans « Localiser » voit où vous êtes en permanence.",
+        "id": "partage", "group": "voir", "priority": True,
+        "title": "Ma position est-elle partagée ?",
+        "why": "Si vous partagez votre position avec quelqu'un, cette personne voit où vous êtes, à tout moment.",
+        "steps": {
+            "iphone": [
+                "Ouvrez Réglages, touchez votre nom, puis « Localiser ».",
+                "Regardez la liste des personnes : retirez celles qui ne doivent pas savoir où vous êtes.",
+                "Si Google Maps est installé : touchez votre photo › « Partage de position » › « Arrêter ».",
+            ],
+            "android": [
+                "Ouvrez Google Maps et touchez votre photo, en haut à droite.",
+                "Touchez « Partage de position ».",
+                "Pour chaque personne qui ne doit pas savoir où vous êtes : « Arrêter ».",
+            ],
+        },
+    },
+    {
+        "id": "applis", "group": "voir", "priority": False,
+        "title": "Mes applis de messages montrent-elles où je suis ?",
+        "why": "WhatsApp, Messenger et Snapchat peuvent envoyer votre position en direct, parfois sans limite de temps.",
         "steps": [
-            "Réglages › [votre nom] › Localiser",
-            "Désactiver « Partager ma position », ou retirer chaque personne de la liste",
-            "Vérifier aussi « Localiser mon iPhone » : il doit rester activé uniquement pour vous",
+            "WhatsApp : Réglages › Confidentialité › Position en direct › « Arrêter le partage ».",
+            "Messenger : dans chaque conversation, touchez « Arrêter le partage » s'il apparaît.",
+            "Snapchat : ouvrez la carte, touchez la roue dentée et activez le « Mode fantôme ».",
         ],
     },
     {
-        "id": "gmaps", "group": "partage", "severity": "high",
-        "title": "Google Maps — partage de position",
-        "risk": "Le partage Google Maps peut être illimité dans le temps et invisible au quotidien.",
+        "id": "famille", "group": "voir", "priority": True,
+        "title": "Une appli « famille » me suit-elle ? (Life360…)",
+        "why": "Ces applis sont faites pour suivre les trajets de chaque membre d'un groupe, en temps réel.",
+        "warning": "En quittant le groupe, la personne reçoit souvent une notification.",
         "steps": [
-            "Google Maps › votre photo de profil › Partage de position",
-            "Pour chaque personne : « Arrêter »",
+            "Cherchez sur votre téléphone une appli comme Life360, Family Link ou « Localiser ma famille ».",
+            "Dans l'appli, quittez le groupe (le « cercle »), puis désinstallez-la.",
         ],
     },
     {
-        "id": "snap", "group": "partage", "severity": "medium",
-        "title": "Snapchat — Snap Map",
-        "risk": "La Snap Map montre votre position à vos amis dès l'ouverture de l'application.",
-        "steps": [
-            "Snapchat › Réglages › Voir ma position",
-            "Activer le « Mode fantôme »",
-        ],
+        "id": "compte", "group": "acces", "priority": True,
+        "title": "Quelqu'un d'autre utilise-t-il mon compte ?",
+        "why": "Si la personne connaît le mot de passe de votre compte Apple ou Google, elle peut voir votre position, vos photos et vos messages depuis un autre appareil.",
+        "steps": {
+            "iphone": [
+                "Ouvrez Réglages et touchez votre nom. En bas, la liste montre vos appareils.",
+                "Touchez un appareil que vous ne reconnaissez pas, puis « Supprimer du compte ».",
+                "Changez le mot de passe, depuis un téléphone ou un ordinateur sûr.",
+                "Vérifiez que l'e-mail et le numéro de secours sont bien les vôtres, et activez l'identification à deux facteurs.",
+            ],
+            "android": [
+                "Ouvrez Paramètres › Google › « Gérer votre compte Google » › Sécurité › « Vos appareils ».",
+                "Déconnectez tout appareil que vous ne reconnaissez pas.",
+                "Changez le mot de passe, depuis un téléphone ou un ordinateur sûr.",
+                "Vérifiez l'e-mail et le numéro de secours, et activez la « validation en deux étapes » avec votre numéro.",
+            ],
+        },
     },
     {
-        "id": "messengers", "group": "partage", "severity": "medium",
-        "title": "WhatsApp / Messenger — position en direct",
-        "risk": "Un partage de position en direct peut durer jusqu'à 8 h, ou indéfiniment sur Messenger.",
-        "steps": [
-            "WhatsApp › Réglages › Confidentialité › Position en direct : « Arrêter le partage »",
-            "Messenger › conversation › Position › « Arrêter le partage »",
-        ],
+        "id": "espion", "group": "acces", "priority": True,
+        "title": "Une appli espion est-elle installée ?",
+        "why": "Certaines applis, souvent présentées comme « contrôle parental », envoient en cachette votre position, vos messages et vos photos à quelqu'un d'autre.",
+        "warning": "Avant de supprimer quoi que ce soit, faites une capture d'écran et déposez-la dans le coffre : c'est une preuve. La personne peut remarquer que l'appli a disparu.",
+        "steps": {
+            "iphone": [
+                "Ouvrez Réglages › Général › « VPN et gestion de l'appareil ».",
+                "Si vous voyez un profil que vous n'avez pas installé vous-même, touchez-le puis « Supprimer ».",
+                "Parcourez vos applis : une appli inconnue ou au nom banal (« Système », « Services ») doit vous alerter.",
+            ],
+            "android": [
+                "Ouvrez Paramètres › Applications, et parcourez la liste : une appli inconnue ou au nom banal (« Système », « Services ») doit vous alerter.",
+                "Cherchez dans les paramètres « Applis d'administration de l'appareil » et désactivez celles que vous ne connaissez pas.",
+                "Ouvrez Google Play › votre photo › « Play Protect » › « Analyser ».",
+            ],
+        },
     },
     {
-        "id": "life360", "group": "partage", "severity": "high",
-        "title": "Life360 et applications « famille »",
-        "risk": "Ces applications sont conçues pour suivre les membres d'un cercle en temps réel.",
-        "steps": [
-            "Quitter le cercle ou désinstaller l'application",
-            "Attention : la personne recevra parfois une notification de départ — choisissez le bon moment",
-        ],
+        "id": "traqueur", "group": "objets", "priority": False,
+        "title": "Un traqueur est-il caché sur moi ? (AirTag…)",
+        "why": "Un petit objet glissé dans un sac, une poche ou une voiture peut suivre tous vos déplacements.",
+        "warning": "Si vous en trouvez un, prenez-le en photo pour le coffre avant de l'enlever.",
+        "steps": {
+            "iphone": [
+                "Ouvrez l'appli Localiser › Objets › « Objets détectés avec vous ».",
+                "Si votre iPhone affiche « AirTag détecté près de vous », prenez-le au sérieux.",
+                "Fouillez sac, manteau, doublures et voiture (pare-chocs, boîte à gants, sous les sièges).",
+            ],
+            "android": [
+                "Ouvrez Paramètres › « Sécurité et urgences » › « Alertes de traqueurs inconnus » › « Rechercher maintenant ».",
+                "Prenez au sérieux une alerte de traqueur inconnu.",
+                "Fouillez sac, manteau, doublures et voiture (pare-chocs, boîte à gants, sous les sièges).",
+            ],
+        },
     },
     {
-        "id": "precise", "group": "permissions", "severity": "medium",
-        "title": "Localisation précise, application par application",
-        "risk": "Une application peut transmettre votre position exacte à quelqu'un d'autre (réseaux sociaux, photos géolocalisées).",
-        "steps": [
-            "Réglages › Confidentialité et sécurité › Service de localisation",
-            "Pour chaque application : « Jamais » ou « Lorsque l'app est active »",
-            "Désactiver « Position exacte » quand ce n'est pas nécessaire",
-        ],
+        "id": "photos", "group": "objets", "priority": False,
+        "title": "Mes photos et mes applis révèlent-elles où je suis ?",
+        "why": "Une photo envoyée peut contenir le lieu exact où elle a été prise, et certaines applis connaissent votre position sans raison.",
+        "steps": {
+            "iphone": [
+                "Ouvrez Réglages › Confidentialité et sécurité › « Service de localisation ».",
+                "Pour l'appareil photo, choisissez « Jamais ».",
+                "Pour les autres applis : « Jamais », ou « Lorsque l'app est active » si elle en a vraiment besoin.",
+            ],
+            "android": [
+                "Ouvrez Paramètres › Localisation › « Autorisations des applications ».",
+                "Pour chaque appli : « Refuser », ou « Seulement si l'appli est en cours d'utilisation » si elle en a vraiment besoin.",
+                "Dans l'appareil photo, ouvrez les paramètres et désactivez la localisation des photos.",
+            ],
+        },
     },
-    {
-        "id": "photos", "group": "permissions", "severity": "low",
-        "title": "Photos géolocalisées",
-        "risk": "Une photo partagée peut contenir le lieu exact où elle a été prise.",
-        "steps": [
-            "Lors du partage : Options › désactiver « Lieu »",
-            "Réglages › Confidentialité › Service de localisation › Appareil photo : « Jamais »",
-        ],
-    },
-    {
-        "id": "appleid", "group": "comptes", "severity": "high",
-        "title": "Compte Apple / Google partagé ou connu de l'auteur·e",
-        "risk": "C'est souvent ainsi que la position, les messages et les photos sont consultés : depuis un autre appareil connecté au même compte.",
-        "steps": [
-            "Réglages › [votre nom] › faire défiler : supprimer tout appareil que vous ne reconnaissez pas",
-            "Changer le mot de passe du compte, depuis un appareil sûr",
-            "Vérifier l'adresse e-mail et le numéro de secours du compte",
-        ],
-    },
-    {
-        "id": "2fa", "group": "comptes", "severity": "medium",
-        "title": "Double authentification",
-        "risk": "Sans double authentification, un mot de passe connu suffit à tout consulter.",
-        "steps": [
-            "Activer la validation en deux étapes (Apple, Google, WhatsApp, Instagram…)",
-            "Utiliser votre propre numéro ou une application d'authentification",
-        ],
-    },
-    {
-        "id": "profiles", "group": "appareil", "severity": "high",
-        "title": "Profils de configuration / gestion d'appareil (MDM)",
-        "risk": "Les logiciels espions « parentaux » (stalkerware) s'installent souvent par un profil : il donne le contrôle de l'appareil à quelqu'un d'autre.",
-        "steps": [
-            "Réglages › Général › VPN et gestion de l'appareil",
-            "Supprimer tout profil que vous n'avez pas installé vous-même",
-        ],
-    },
-    {
-        "id": "trackers", "group": "appareil", "severity": "medium",
-        "title": "Traqueurs Bluetooth (AirTag, SmartTag…)",
-        "risk": "Un petit traqueur glissé dans un sac ou une voiture suit vos déplacements.",
-        "steps": [
-            "Localiser › Objets › « Objets détectés avec vous »",
-            "Prendre au sérieux la notification « AirTag détecté à proximité »",
-            "Inspecter sac, manteau, voiture (pare-chocs, boîte à gants)",
-        ],
-    },
-    {
-        "id": "safetycheck", "group": "appareil", "severity": "low",
-        "title": "Contrôle de sécurité iOS — réinitialisation d'urgence",
-        "risk": "iOS propose une commande unique qui coupe d'un coup tous les partages avec toutes les personnes.",
-        "steps": [
-            "Réglages › Confidentialité et sécurité › Contrôle de sécurité",
-            "« Réinitialisation d'urgence » : révoque tous les accès et partages",
-        ],
-    },
-    {
-        "id": "vpn", "group": "appareil", "severity": "low",
-        "title": "VPN / iCloud Private Relay",
-        "risk": "Utile pour masquer votre adresse IP sur le web — mais cela ne cache PAS le GPS partagé via Localiser ou Google Maps.",
-        "steps": [
-            "Réglages › [votre nom] › iCloud › Relais privé",
-            "Ne pas compter sur un VPN pour arrêter un partage de position",
-        ],
-    },
+]
+
+# Un seul geste qui coupe tout — il n'existe que sur iPhone.
+LOCATION_QUICK = {
+    "iphone": "Réglages › Confidentialité et sécurité › « Contrôle de sécurité » › « Réinitialisation "
+              "d'urgence » : coupe d'un coup tous les partages de position et tous les accès donnés à "
+              "d'autres personnes.",
+}
+
+LOCATION_TIPS = [
+    "Un VPN ne cache pas votre position : il faut couper les partages ci-dessus.",
+    "Si vous pensez que votre téléphone est surveillé, utilisez un autre téléphone "
+    "(prêté ou neuf) pour appeler à l'aide ou préparer un départ.",
+    "Pas besoin de tout faire aujourd'hui : cochez ce qui est fait, Abri s'en souvient.",
 ]
 
 # Résultats de l'analyse automatique. Un prototype web ne peut pas réellement
 # inspecter un téléphone : ces résultats sont fixes et servent la démonstration.
 SCAN_FINDINGS = [
-    {"item": "profiles", "level": "high",
-     "text": "Profil de configuration inconnu installé : « Contrôle parental »",
-     "detail": "Ce type de profil peut transmettre position, messages et captures d'écran à un autre appareil."},
-    {"item": "findmy", "level": "high",
-     "text": "Partage de position actif dans Localiser avec 1 personne",
-     "detail": "Votre position est visible en continu."},
-    {"item": "life360", "level": "high",
-     "text": "Life360 installé — position partagée avec le cercle « Famille »",
-     "detail": "Historique des trajets consultable par les membres du cercle."},
-    {"item": "appleid", "level": "medium",
-     "text": "2 appareils connectés à votre identifiant Apple, dont un iPad que vous n'utilisez pas",
-     "detail": "Cet appareil reçoit vos messages et peut voir votre position."},
-    {"item": "precise", "level": "medium",
-     "text": "Position exacte activée pour 7 applications",
-     "detail": "Dont Instagram, Snapchat, Facebook et l'appareil photo."},
-    {"item": "snap", "level": "medium",
-     "text": "Snap Map : mode fantôme désactivé",
-     "detail": "Vos amis Snapchat voient votre dernière position."},
-    {"item": "messengers", "level": "ok",
-     "text": "WhatsApp : aucun partage de position en direct",
-     "detail": ""},
-    {"item": "trackers", "level": "ok",
-     "text": "Aucun traqueur Bluetooth détecté à proximité",
+    {"item": "espion", "level": "high",
+     "text": "Une appli de surveillance semble installée (« Contrôle parental »)",
+     "detail": "Elle peut envoyer votre position, vos messages et vos photos à quelqu'un d'autre."},
+    {"item": "partage", "level": "high",
+     "text": "Votre position est partagée en continu avec 1 personne",
+     "detail": "Cette personne voit où vous êtes, à tout moment."},
+    {"item": "famille", "level": "high",
+     "text": "Life360 : votre position est partagée avec le groupe « Famille »",
+     "detail": "Les membres du groupe voient vos trajets."},
+    {"item": "compte", "level": "medium",
+     "text": "Un appareil que vous n'utilisez pas est connecté à votre compte",
+     "detail": "Il peut recevoir vos messages et voir votre position."},
+    {"item": "photos", "level": "medium",
+     "text": "7 applis connaissent votre position exacte",
+     "detail": "Dont Instagram, Snapchat et l'appareil photo."},
+    {"item": "applis", "level": "medium",
+     "text": "Snapchat montre votre position à vos amis",
+     "detail": "Le « Mode fantôme » est désactivé."},
+    {"item": "traqueur", "level": "ok",
+     "text": "Aucun traqueur détecté près de vous",
      "detail": ""},
 ]
 
@@ -645,53 +710,58 @@ SCAN_FINDINGS = [
 # 5. Coffre à preuves : catégories et pièces d'un dossier de plainte
 # ---------------------------------------------------------------------------
 
+# Écrit en français facile (FALC) : phrases courtes, mots de tous les jours, une idée à la
+# fois. Pensé pour un enfant de 9 ans ou une personne qui lit mal le français.
 EVIDENCE_CATEGORIES = [
-    {"id": "blessure", "label": "Photo de blessure", "icon": "🩹"},
-    {"id": "message", "label": "Message / menace (capture)", "icon": "💬"},
-    {"id": "degats", "label": "Dégâts matériels", "icon": "🔨"},
-    {"id": "document", "label": "Document (constat, relevé…)", "icon": "📄"},
-    {"id": "audio", "label": "Enregistrement audio", "icon": "🎙️"},
-    {"id": "autre", "label": "Autre", "icon": "📎"},
+    {"id": "blessure", "label": "Une blessure", "icon": "🩹"},
+    {"id": "message", "label": "Un message méchant", "icon": "💬"},
+    {"id": "degats", "label": "Quelque chose de cassé", "icon": "🔨"},
+    {"id": "document", "label": "Un papier", "icon": "📄"},
+    {"id": "audio", "label": "Un son", "icon": "🎙️"},
+    {"id": "autre", "label": "Autre chose", "icon": "📎"},
 ]
 
-# sections : les sections du questionnaire pour lesquelles la pièce est utile.
-# always  : toujours utile. category : catégorie du coffre où la déposer.
+# Ce qu'il faut pour porter plainte (onglet « Ma liste » du coffre, et résultat du questionnaire).
+# sections : sections du questionnaire pour lesquelles c'est utile. always : toujours utile.
+# category : où le ranger dans le coffre (None = à faire hors de l'application).
 DOSSIER_ITEMS = [
-    {"id": "identite", "always": True,
-     "label": "Pièce d'identité",
-     "detail": "Carte d'identité, passeport ou permis de séjour (copie dans le coffre).",
+    {"id": "identite", "always": True, "icon": "🪪",
+     "label": "Votre carte d'identité",
+     "detail": "Ou votre passeport, ou votre permis. Prenez-la en photo.",
      "category": "document"},
-    {"id": "constat", "sections": ["physique", "sexuelle"],
-     "label": "Constat médical",
-     "detail": "À faire établir le plus vite possible après les faits à l'Unité de médecine des violences (021 314 00 60), même sans porter plainte tout de suite : le constat est conservé et peut servir plus tard.",
+    {"id": "constat", "sections": ["physique", "sexuelle"], "icon": "🩺",
+     "label": "Un papier du médecin",
+     "detail": "Un médecin regarde vos blessures et écrit ce qu'il voit. Allez-y vite. "
+               "Vous n'êtes pas obligé·e de porter plainte tout de suite.",
      "category": "document", "contact": "umv"},
-    {"id": "photos", "sections": ["physique", "psychologique"],
-     "label": "Photos datées des blessures ou des dégâts",
-     "detail": "Prenez-les dès que possible, avec la date et l'heure ; déposez-les dans le coffre (horodatage automatique).",
+    {"id": "photos", "sections": ["physique", "psychologique"], "icon": "📷",
+     "label": "Des photos des blessures ou de ce qui est cassé",
+     "detail": "Prenez les photos vite. Le coffre garde la date.",
      "category": "blessure"},
-    {"id": "messages", "sections": ["psychologique", "economique", "mariage", "sexuelle"],
-     "label": "Captures d'écran des messages, appels et menaces",
-     "detail": "Numéro ou nom de l'expéditeur, date et heure visibles. Ne supprimez rien.",
+    {"id": "messages", "sections": ["psychologique", "economique", "mariage", "sexuelle"], "icon": "💬",
+     "label": "Des photos de l'écran avec les messages",
+     "detail": "On doit voir qui a écrit, et quand. N'effacez rien.",
      "category": "message"},
-    {"id": "journal", "always": True,
-     "label": "Chronologie des faits",
-     "detail": "Quoi, quand, où, qui a vu : notez chaque événement dans le journal du coffre.",
+    {"id": "journal", "always": True, "icon": "📝",
+     "label": "Ce qui s'est passé, écrit par vous",
+     "detail": "Quoi ? Quand ? Où ? Qui a vu ?",
      "category": "journal"},
-    {"id": "temoins", "always": True,
-     "label": "Coordonnées des témoins",
-     "detail": "Voisin·e·s, proches, collègues, médecin, école des enfants.",
+    {"id": "temoins", "always": True, "icon": "👥",
+     "label": "Les personnes qui ont vu ou entendu",
+     "detail": "Voisins, famille, amis, médecin, école. Notez leur nom et leur numéro.",
      "category": None},
-    {"id": "banque", "sections": ["economique"],
-     "label": "Relevés bancaires, contrats, factures",
-     "detail": "Pour documenter les retraits, dettes ou dépenses imposées.",
+    {"id": "banque", "sections": ["economique"], "icon": "💶",
+     "label": "Les papiers d'argent",
+     "detail": "Papiers de la banque, factures, dettes.",
      "category": "document"},
-    {"id": "civil", "sections": ["mariage"],
-     "label": "Documents d'état civil et de séjour",
-     "detail": "Acte de mariage, livret de famille, permis : mettez des copies en lieu sûr (coffre).",
+    {"id": "civil", "sections": ["mariage"], "icon": "📑",
+     "label": "Les papiers de mariage et de séjour",
+     "detail": "Acte de mariage, livret de famille, permis. Gardez une copie ici.",
      "category": "document"},
-    {"id": "audio", "optional": True,
-     "label": "Enregistrements audio",
-     "detail": "Enregistrer une conversation sans consentement peut être punissable en Suisse (art. 179ter CP) : demandez conseil à un·e avocat·e ou au Centre LAVI avant de les utiliser.",
+    {"id": "audio", "optional": True, "icon": "🎙️",
+     "label": "Des enregistrements (son)",
+     "detail": "Attention : enregistrer quelqu'un en secret peut être interdit (art. 179ter CP). "
+               "Demandez d'abord au Centre LAVI.",
      "category": "audio"},
 ]
 
