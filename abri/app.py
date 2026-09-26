@@ -87,8 +87,10 @@ def manifest():
 
 @app.get("/api/cover/recipes")
 def cover_recipes():
-    return jsonify({"recipes": C.RECIPES, "categories": C.RECIPE_CATEGORIES,
-                    "configured": L.is_configured()})
+    """Les 60 recettes fixes + les 2 recettes du jour."""
+    return jsonify({"recipes": [L.for_client(r) for r in C.RECIPES_FIXED],
+                    "daily": [L.for_client(r) for r in L.daily_recipes()],
+                    "categories": C.RECIPE_CATEGORIES, "configured": L.is_configured()})
 
 
 @app.post("/api/cover/adapt")

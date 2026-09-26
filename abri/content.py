@@ -2,6 +2,7 @@
 content.py — Tout le contenu "métier" du prototype Abri.
 
   • RECIPES          : les recettes de l'application de couverture "Petits Plats"
+                       (+ recettes_suisses/francaises/internationales.py : 200 en tout)
   • QUESTIONNAIRE    : le questionnaire Oui/Non (source : canton de Vaud)
   • SITUATION        : questions facultatives qui affinent la redirection
   • CONTACTS / AXES  : le réseau vaudois de lutte contre la violence domestique
@@ -19,6 +20,7 @@ Aucune logique ici : uniquement des données, faciles à modifier par l'équipe.
 RECIPES = [
     {
         "id": "rosti",
+        "region": "Berne",
         "name": "Rösti bernois",
         "emoji": "🥔",
         "category": "Plats",
@@ -42,6 +44,7 @@ RECIPES = [
     },
     {
         "id": "fondue",
+        "region": "Fribourg",
         "name": "Fondue moitié-moitié",
         "emoji": "🧀",
         "category": "Plats",
@@ -67,6 +70,7 @@ RECIPES = [
     },
     {
         "id": "papet",
+        "region": "Vaud",
         "name": "Papet vaudois",
         "emoji": "🥬",
         "category": "Plats",
@@ -257,7 +261,20 @@ RECIPES = [
     },
 ]
 
-RECIPE_CATEGORIES = ["Tous", "Entrées", "Plats", "Desserts"]
+# 200 recettes en tout :
+#   • RECIPES_FIXED      : les 60 toujours affichées, suisses d'abord — les seules qui
+#                          peuvent servir de recette secrète (l'accès ne disparaît jamais)
+#   • RECIPES_DAILY_POOL : la réserve des « recettes du jour » (2 par jour, logic.daily_recipes)
+from recettes_francaises import CLASSIQUES, FRANCAISES  # noqa: E402
+from recettes_internationales import INTERNATIONALES  # noqa: E402
+from recettes_suisses import RECETTES_SUISSES, SUISSES_DU_JOUR  # noqa: E402
+
+RECIPES_FIXED = ([r for r in RECIPES if r.get("region")] + RECETTES_SUISSES + CLASSIQUES
+                 + [r for r in RECIPES if not r.get("region")])
+RECIPES_DAILY_POOL = SUISSES_DU_JOUR + FRANCAISES + INTERNATIONALES
+RECIPES = RECIPES_FIXED + RECIPES_DAILY_POOL
+
+RECIPE_CATEGORIES = ["Tous", "Entrées", "Plats", "Desserts", "Boulangerie"]
 
 # ---------------------------------------------------------------------------
 # 2. Questionnaire — "Évaluer votre situation" (Oui / Non)

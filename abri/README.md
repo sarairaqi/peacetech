@@ -58,6 +58,9 @@ abri/
 │                     #           redirections, coffre à preuves, export ZIP
 ├── content.py        # contenu : recettes, questionnaire, réseau vaudois, checklist
 │                     #           localisation, pièces du dossier  ← à modifier en priorité
+├── recettes_*.py     # 200 recettes (suisses, françaises, internationales) : 60 toujours
+│                     #   affichées — les seules utilisables comme recette secrète —
+│                     #   et une réserve de 140 d'où sortent 2 « recettes du jour »
 ├── templates/index.html
 ├── static/app.js     # interface (une seule page, état + rendu)
 ├── static/style.css  # deux univers visuels : cuisine / Abri

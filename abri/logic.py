@@ -3,7 +3,7 @@ logic.py — La logique du prototype Abri (sans Flask, testable seule).
 
   • Storage      : lecture/écriture des fichiers JSON dans storage/
   • Auth         : vérification « bonne recette + bon nombre de personnes »
-  • Recettes     : adaptation des quantités (comportement normal de l'app de cuisine)
+  • Recettes     : recettes du jour, adaptation des quantités
   • Questionnaire: calcul du niveau de danger + redirections + pièces du dossier
   • Coffre       : dépôt, listing, suppression, export ZIP des preuves
 """
@@ -13,12 +13,13 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import math
 import mimetypes
 import os
 import secrets
 import uuid
 import zipfile
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from werkzeug.utils import secure_filename
@@ -83,7 +84,8 @@ def recipe_by_id(recipe_id: str) -> dict | None:
 
 
 def set_config(recipe_id: str, persons: int) -> dict:
-    if recipe_by_id(recipe_id) is None:
+    # Seules les 60 recettes fixes : une recette du jour disparaîtrait le lendemain.
+    if not any(r["id"] == recipe_id for r in C.RECIPES_FIXED):
         raise ValueError("Recette inconnue")
     persons = int(persons)
     if not PERSONS_MIN <= persons <= PERSONS_MAX:
@@ -113,6 +115,46 @@ def new_token() -> str:
 # Recettes : adaptation des quantités (comportement « normal »)
 # ---------------------------------------------------------------------------
 
+_INT_UNITS = {"g", "ml"}
+_FIXED_UNITS = {"pincée"}
+DAILY_COUNT = 2   # « recettes du jour » affichées en plus des 60 recettes fixes
+
+
+def daily_recipes(day: date | None = None) -> list[dict]:
+    """Les recettes du jour : tirées de la réserve, les mêmes toute la journée (et après un redémarrage)."""
+    key = (day or date.today()).isoformat()
+    rank = lambda r: hashlib.sha256(f"{r['id']}|{key}".encode()).hexdigest()  # noqa: E731
+    return sorted(C.RECIPES_DAILY_POOL, key=rank)[:DAILY_COUNT]
+
+
+def rounding(ing: dict) -> str:
+    """
+    Comment arrondir une quantité adaptée — règle partagée avec l'interface (app.js) :
+      'int'  : grammes, millilitres → entier
+      'half' : le reste (pièces, cuillères, dl, l) → demi (quart sous 1)
+      'none' : une pincée reste une pincée
+    """
+    unit = ing["unit"].strip().lower()
+    if unit in _FIXED_UNITS:
+        return "none"
+    if unit.split(" ")[0] in _INT_UNITS:
+        return "int"
+    return "half"
+
+
+def for_client(recipe: dict) -> dict:
+    """La recette telle que l'interface la reçoit : chaque ingrédient porte sa règle d'arrondi."""
+    return {**recipe, "ingredients": [{**i, "round": rounding(i)} for i in recipe["ingredients"]]}
+
+
+def _round_qty(value: float, mode: str) -> float:
+    if mode == "int":
+        return max(1, math.floor(value + 0.5))
+    if value < 1:
+        return max(0.25, math.floor(value * 4 + 0.5) / 4)
+    return math.floor(value * 2 + 0.5) / 2
+
+
 def _fmt_qty(value: float) -> str:
     """0.5 → ½, 1.5 → 1½, 2.0 → 2, 0.33 → 0.3."""
     whole = int(value)
@@ -136,14 +178,12 @@ def scale_recipe(recipe_id: str, persons) -> list[dict]:
     factor = persons / recipe["base_servings"]
     out = []
     for ing in recipe["ingredients"]:
-        qty = ing["qty"] * factor
-        if ing["unit"] == "pincée":
-            qty = ing["qty"]  # une pincée reste une pincée
-        elif ing["unit"] == "" or ing["unit"].startswith("c. à"):
-            qty = round(qty * 2) / 2  # arrondi au demi
+        mode = rounding(ing)
+        if mode == "none":
+            qty = _fmt_qty(ing["qty"])
         else:
-            qty = round(qty)
-        out.append({"name": ing["name"], "qty": _fmt_qty(qty), "unit": ing["unit"]})
+            qty = _fmt_qty(_round_qty(ing["qty"] * factor, mode))
+        out.append({"name": ing["name"], "qty": qty, "unit": ing["unit"]})
     return out
 
 

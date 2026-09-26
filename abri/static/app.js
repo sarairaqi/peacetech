@@ -57,8 +57,11 @@ const I = {
 const S = {
   mode: 'loading',                // 'setup' | 'cover' | 'app'
   recipes: [], categories: [], personsMin: 1, personsMax: 12,
-  cover: { tab: 'recettes', cat: 'Tous', query: '', recipe: null, persons: 4, adapted: null,
+  // persons : le nombre choisi (− / + / saisie) ; adapted : celui des quantités affichées,
+  // mis à jour seulement par le bouton « Adapter les quantités »
+  cover: { tab: 'recettes', cat: 'Tous', query: '', recipe: null, persons: 4, adapted: 4, confirmClear: false,
            favs: new Set(), cart: [], profile: { notif: true, metric: true, dark: false } },
+  daily: [],                      // les 2 recettes du jour (S.recipes = les 60 recettes fixes)
   setup: { step: 0, recipe: null, persons: 4, fromSettings: false },
   token: null, boot: null, tab: 'quiz',
   quiz: { stage: 'intro', i: 0, answers: {}, situation: {}, si: 0, result: null, busy: false },
@@ -77,6 +80,29 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const grad = (r) => `linear-gradient(135deg, ${r.gradient[0]}, ${r.gradient[1]})`;
 const fmtDate = (iso) => { const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString('fr-CH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
 const localDT = (d = new Date()) => { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+
+const findRecipe = (id) => [...S.recipes, ...S.daily].find((r) => r.id === id) || null;
+
+// Adaptation des quantités, mêmes règles que logic.scale_recipe : chaque ingrédient porte
+// sa règle d'arrondi ('int' | 'half' | 'none'). Appliquée au bouton « Adapter les quantités »,
+// le seul geste qui peut aussi ouvrir Abri (− / + ne déverrouillent rien par accident).
+function fmtQty(v) {
+  const whole = Math.floor(v); const frac = Math.round((v - whole) * 100) / 100;
+  const F = { 0.25: '¼', 0.5: '½', 0.75: '¾' };
+  if (!frac) return String(whole);
+  if (F[frac]) return `${whole || ''}${F[frac]}`;
+  return v.toFixed(1).replace(/\.?0+$/, '');
+}
+function scaleIngredients(r, persons) {
+  const f = persons / r.base_servings;
+  return r.ingredients.map((i) => {
+    if (i.round === 'none') return { name: i.name, qty: fmtQty(i.qty), unit: i.unit };
+    const v = i.qty * f;
+    const q = i.round === 'int' ? Math.max(1, Math.round(v))
+      : v < 1 ? Math.max(0.25, Math.round(v * 4) / 4) : Math.round(v * 2) / 2;
+    return { name: i.name, qty: fmtQty(q), unit: i.unit };
+  });
+}
 
 async function api(path, { method = 'GET', body, form } = {}) {
   const headers = {};
@@ -119,8 +145,10 @@ function render() {
   lastViewKey = key;
 
   const abri = S.mode !== 'cover';
-  screen.className = `screen ${abri ? 'theme-abri' : 'theme-cover'}${screen.classList.contains('unlocking') ? ' unlocking' : ''}`;
+  const dark = !abri && S.cover.profile.dark;
+  screen.className = `screen ${abri ? 'theme-abri' : 'theme-cover'}${dark ? ' dark' : ''}${screen.classList.contains('unlocking') ? ' unlocking' : ''}`;
   phoneEl.classList.toggle('on-abri', abri);
+  phoneEl.classList.toggle('cover-dark', dark);
 
   if (S.mode === 'loading') screen.innerHTML = '';
   else if (S.mode === 'setup') screen.innerHTML = renderSetup();
@@ -219,26 +247,32 @@ function renderCover() {
 
 function filteredRecipes() {
   const c = S.cover; const q = c.query.trim().toLowerCase();
-  return S.recipes.filter((r) => (c.cat === 'Tous' || r.category === c.cat) &&
-    (!q || r.name.toLowerCase().includes(q) || r.ingredients.some((i) => i.name.toLowerCase().includes(q))));
+  const matches = (r) => !q || r.name.toLowerCase().includes(q) || r.ingredients.some((i) => i.name.toLowerCase().includes(q));
+  // Les recettes du jour sont en haut (cartes à part) ; la recherche les inclut aussi
+  const pool = q ? [...S.recipes, ...S.daily] : S.recipes;
+  return pool.filter((r) => (c.cat === 'Tous' || r.category === c.cat) && matches(r));
 }
 
+const recipeMeta = (r) => `⏱ ${esc(r.time)} · ${esc(r.difficulty)}`;
 function recipeCard(r) {
   const fav = S.cover.favs.has(r.id);
   return `<div class="recipe-card">
-    <button class="tile" style="background:${grad(r)};width:100%" data-action="cover-open" data-id="${r.id}">${r.emoji}</button>
-    <button class="body" style="display:block;width:100%;text-align:left" data-action="cover-open" data-id="${r.id}"><div class="name">${esc(r.name)}</div><div class="meta">⏱ ${r.time} · ${r.difficulty}</div></button>
-    <button class="fav ${fav ? 'on' : ''}" data-action="cover-fav" data-id="${r.id}">${I.heart}</button>
+    <button class="tile" style="background:${esc(grad(r))};width:100%" data-action="cover-open" data-id="${esc(r.id)}">${esc(r.emoji)}</button>
+    <button class="body" style="display:block;width:100%;text-align:left" data-action="cover-open" data-id="${esc(r.id)}"><div class="name">${esc(r.name)}</div><div class="meta">${recipeMeta(r)}</div></button>
+    <button class="fav ${fav ? 'on' : ''}" data-action="cover-fav" data-id="${esc(r.id)}">${I.heart}</button>
   </div>`;
 }
 
 function coverGrid() {
-  const c = S.cover; const list = filteredRecipes();
-  const day = Math.floor(Date.now() / 86400000);
-  const feat = S.recipes[day % S.recipes.length];
-  const featHtml = !c.query && c.cat === 'Tous' && feat ? `<button class="feature-card" data-action="cover-open" data-id="${feat.id}"><span class="em">${feat.emoji}</span><span><span class="muted small">Recette du jour</span><b>${esc(feat.name)}</b><span class="muted small">⏱ ${feat.time} · ${feat.difficulty}</span></span></button>` : '';
-  return featHtml + (list.length ? list.map(recipeCard).join('') : `<div class="empty" style="grid-column:1/-1"><div class="em">🥄</div>Aucune recette ne correspond</div>`);
+  const c = S.cover; const list = filteredRecipes(); const q = c.query.trim();
+  // Les 2 recettes du jour (choisies par le serveur parmi la réserve, elles changent chaque jour)
+  const featHtml = !q && c.cat === 'Tous' ? S.daily.map((r) => `<button class="feature-card" data-action="cover-open" data-id="${esc(r.id)}"><span class="em">${esc(r.emoji)}</span><span><span class="muted small">Recette du jour</span><b>${esc(r.name)}</b><span class="muted small">${recipeMeta(r)}</span></span></button>`).join('') : '';
+  const empty = `<div class="empty" style="grid-column:1/-1"><div class="em">🥄</div>Aucune recette ne correspond</div>`;
+  return featHtml + (list.length ? list.map(recipeCard).join('') : empty);
 }
+
+// Met à jour la seule grille (garde le focus du champ de recherche pendant la saisie)
+function refreshGrid() { const g = $('#recipe-grid', screen); if (g) g.innerHTML = coverGrid(); }
 
 function coverHome() {
   const c = S.cover;
@@ -250,38 +284,52 @@ function coverHome() {
   </div>`;
 }
 
+const ingredientItems = (r) => scaleIngredients(r, S.cover.adapted)
+  .map((i) => `<li><span>${esc(i.name)}</span><span class="q">${esc(`${i.qty} ${i.unit}`.trim())}</span></li>`).join('');
+
+// Après « Adapter les quantités » : seule la liste change (le champ garde sa saisie et son focus)
+function refreshIngredients() {
+  const r = S.cover.recipe; if (!r) return;
+  const list = $('#ing-list', screen); if (list) list.innerHTML = ingredientItems(r);
+  const title = $('#ing-title', screen); if (title) title.textContent = `Ingrédients · ${S.cover.adapted} pers.`;
+}
+
 function coverRecipe(r) {
   const c = S.cover;
-  const ings = c.adapted && c.adapted.recipe === r.id ? c.adapted.ingredients : r.ingredients;
-  const pers = c.adapted && c.adapted.recipe === r.id ? c.adapted.persons : r.base_servings;
   const fav = c.favs.has(r.id);
+  const pills = `<span class="pill">⏱ ${esc(r.time)}</span><span class="pill">👩‍🍳 ${esc(r.difficulty)}</span>`;
   return `<div class="content">
-    <div class="recipe-hero" style="background:${grad(r)}"><button class="back" data-action="cover-back">${I.back}</button>${r.emoji}
-      <button class="fav ${fav ? 'on' : ''}" style="position:absolute;top:8px;right:16px;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.85);color:#c24e2a;display:flex;align-items:center;justify-content:center" data-action="cover-fav" data-id="${r.id}">${I.heart}</button></div>
+    <div class="recipe-hero" style="background:${esc(grad(r))}">${esc(r.emoji)}<button class="back" data-action="cover-back">${I.back}</button>
+      <button class="fav ${fav ? 'on' : ''}" style="position:absolute;top:8px;right:16px;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.85);color:#c24e2a;display:flex;align-items:center;justify-content:center" data-action="cover-fav" data-id="${esc(r.id)}">${I.heart}</button></div>
     <div class="recipe-title">${esc(r.name)}</div>
-    <div class="meta-pills"><span class="pill">⏱ ${r.time}</span><span class="pill">👩‍🍳 ${r.difficulty}</span><span class="pill">🍽 ${r.category}</span></div>
-    <div class="card"><div class="servings"><div><b>Pour combien de personnes ?</b><div class="muted small">Les quantités s'adaptent automatiquement</div></div>
+    <div class="meta-pills">${pills}${r.region ? `<span class="pill">📍 ${esc(r.region)}</span>` : ''}<span class="pill">🍽 ${esc(r.category)}</span></div>
+    <div class="card"><div class="servings"><div><b>Pour combien de personnes ?</b><div class="muted small">Choisissez le nombre, puis adaptez les quantités</div></div>
       <div class="stepper"><button data-action="persons-dec">−</button><input type="number" inputmode="numeric" min="${S.personsMin}" max="${S.personsMax}" value="${c.persons}" data-input="persons"><button data-action="persons-inc">+</button></div></div>
       <button class="btn primary block" style="margin-top:12px" data-action="adapt">Adapter les quantités</button></div>
-    <div class="section-title">Ingrédients · ${pers} pers.</div>
-    <div class="card"><ul class="ingredients">${ings.map((i) => `<li><span>${esc(i.name)}</span><span class="q">${esc(i.qty)} ${esc(i.unit)}</span></li>`).join('')}</ul></div>
+    <div class="section-title" id="ing-title">Ingrédients · ${c.adapted} pers.</div>
+    <div class="card"><ul class="ingredients" id="ing-list">${ingredientItems(r)}</ul></div>
     <div class="section-title">Préparation</div>
     <div class="card"><ol class="steps">${r.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>
-    <button class="btn ghost block" data-action="add-cart" data-id="${r.id}">${I.cart} Ajouter à la liste de courses</button>
-  </div>`;
+    <button class="btn ghost block" data-action="add-cart" data-id="${esc(r.id)}">${I.cart} Ajouter à la liste de courses</button>  </div>`;
 }
 
 function coverFavs() {
-  const list = S.recipes.filter((r) => S.cover.favs.has(r.id));
+  const list = [...S.cover.favs].map(findRecipe).filter(Boolean);
   return `<div class="content"><div class="cover-hero"><h1>Mes favoris</h1></div>
     ${list.length ? `<div class="recipe-grid">${list.map(recipeCard).join('')}</div>` : `<div class="empty"><div class="em">🤍</div>Touchez le cœur d'une recette pour la retrouver ici</div>`}</div>`;
 }
 
 function coverCart() {
-  const cart = S.cover.cart;
-  return `<div class="content"><div class="cover-hero"><h1>Liste de courses</h1></div>
-    ${cart.length ? `<div class="card"><ul class="ingredients">${cart.map((i, n) => `<li><label class="row" style="flex:1"><input type="checkbox" data-action="cart-check" data-n="${n}" ${i.done ? 'checked' : ''}><span style="${i.done ? 'text-decoration:line-through;opacity:.5' : ''}">${esc(i.name)}</span></label><span class="q">${esc(i.qty)} ${esc(i.unit)}</span></li>`).join('')}</ul></div>
-      <button class="btn muted block" data-action="cart-clear">Vider la liste</button>` : `<div class="empty"><div class="em">🧺</div>Votre liste est vide.<br>Ajoutez les ingrédients d'une recette.</div>`}</div>`;
+  const c = S.cover; const cart = c.cart;
+  const nDone = cart.filter((i) => i.done).length;
+  const clearBtn = c.confirmClear
+    ? `<div class="row"><button class="btn muted block" data-action="cart-clear-cancel">Annuler</button><button class="btn primary block" data-action="cart-clear-confirm">Tout supprimer</button></div>`
+    : `<button class="btn muted block" data-action="cart-clear">Vider la liste</button>`;
+  return `<div class="content"><div class="cover-hero"><h1>Liste de courses</h1>${cart.length ? `<div class="muted small">${cart.length} article${cart.length > 1 ? 's' : ''}${nDone ? ` · ${nDone} coché${nDone > 1 ? 's' : ''}` : ''}</div>` : ''}</div>
+    ${cart.length ? `<div class="card"><ul class="ingredients">${cart.map((i, n) => `<li><label class="row" style="flex:1"><input type="checkbox" data-action="cart-check" data-n="${n}" ${i.done ? 'checked' : ''}><span style="${i.done ? 'text-decoration:line-through;opacity:.5' : ''}">${esc(i.name)}</span></label><span class="q">${esc(`${i.qty} ${i.unit}`.trim())}</span></li>`).join('')}</ul></div>
+      ${nDone && !c.confirmClear ? `<button class="btn soft block" style="margin-bottom:10px" data-action="cart-remove-done">Retirer les articles cochés (${nDone})</button>` : ''}
+      ${c.confirmClear ? `<p class="small muted" style="text-align:center;margin:0 0 10px">Supprimer les ${cart.length} articles de la liste ?</p>` : ''}
+      ${clearBtn}` : `<div class="empty"><div class="em">🧺</div>Votre liste est vide.<br>Ajoutez les ingrédients d'une recette.</div>`}</div>`;
 }
 
 function coverProfile() {
@@ -306,9 +354,8 @@ async function adaptRecipe() {
   try { data = await api('/api/cover/adapt', { method: 'POST', body: { recipe_id: r.id, persons: c.persons } }); }
   catch (e) { toast(e.message); return; }
   if (data.token) { unlock(data.token); return; }            // ← accès secret reconnu
-  c.adapted = { recipe: r.id, persons: data.persons, ingredients: data.ingredients };
-  render();
-  toast(`Quantités adaptées pour ${data.persons} personne${data.persons > 1 ? 's' : ''}`);
+  c.adapted = c.persons; refreshIngredients();
+  toast(`Quantités adaptées pour ${c.adapted} personne${c.adapted > 1 ? 's' : ''}`);
 }
 
 // ===========================================================================
@@ -326,7 +373,6 @@ async function unlock(token) {
     S.ev = { sub: 'pieces', cat: 'blessure', file: null, note: '', jtext: '', jdate: '', busy: false };
     S.contacts = { open: {} };
     S.overlay = null;
-    S.cover.adapted = null;
     render();
     resetIdle();
     setTimeout(() => screen.classList.remove('unlocking'), 400);
@@ -337,7 +383,7 @@ function lock(notify = true) {
   if (S.token && notify) api('/api/app/lock', { method: 'POST' }).catch(() => {});
   S.token = null; S.boot = null; S.overlay = null;
   clearInterval(callTimer); clearTimeout(idleTimer);
-  S.mode = 'cover'; S.cover.recipe = null; S.cover.tab = 'recettes'; S.cover.adapted = null; S.cover.persons = 4;
+  S.mode = 'cover'; S.cover.recipe = null; S.cover.tab = 'recettes'; S.cover.persons = 4;
   render();
 }
 
@@ -666,18 +712,22 @@ const actions = {
   'setup-dec': () => { S.setup.persons = Math.max(S.personsMin, S.setup.persons - 1); render(); },
   'setup-finish': setupFinish,
   // — app de cuisine
-  'cover-tab': (d) => { S.cover.tab = d.tab; S.cover.recipe = null; render(); },
+  'cover-tab': (d) => { S.cover.tab = d.tab; S.cover.recipe = null; S.cover.confirmClear = false; render(); },
   'cover-cat': (d) => { S.cover.cat = d.cat; render(); },
-  'cover-open': (d) => { const r = S.recipes.find((x) => x.id === d.id); S.cover.recipe = r; S.cover.persons = r.base_servings; S.cover.adapted = null; render(); $('.content', screen).scrollTop = 0; },
+  'cover-open': (d) => { const r = findRecipe(d.id); if (!r) return; S.cover.recipe = r; S.cover.persons = S.cover.adapted = r.base_servings; render(); $('.content', screen).scrollTop = 0; },
   'cover-back': () => { S.cover.recipe = null; render(); },
   'cover-fav': (d) => { const f = S.cover.favs; f.has(d.id) ? f.delete(d.id) : f.add(d.id); render(); },
   'persons-inc': () => { S.cover.persons = Math.min(S.personsMax, S.cover.persons + 1); render(); },
   'persons-dec': () => { S.cover.persons = Math.max(S.personsMin, S.cover.persons - 1); render(); },
   'adapt': adaptRecipe,
-  'add-cart': (d) => { const r = S.recipes.find((x) => x.id === d.id); const a = S.cover.adapted; const ings = a && a.recipe === r.id ? a.ingredients : r.ingredients;
-    S.cover.cart.push(...ings.map((i) => ({ ...i, done: false }))); toast('Ingrédients ajoutés à la liste'); },
+  'add-cart': (d) => { const r = findRecipe(d.id); if (!r) return;
+    S.cover.cart.push(...scaleIngredients(r, S.cover.adapted).map((i) => ({ ...i, done: false }))); toast('Ingrédients ajoutés à la liste'); },
   'cart-check': (d) => { S.cover.cart[+d.n].done = !S.cover.cart[+d.n].done; render(); },
-  'cart-clear': () => { S.cover.cart = []; render(); },
+  'cart-clear': () => { S.cover.confirmClear = true; render(); },
+  'cart-clear-cancel': () => { S.cover.confirmClear = false; render(); },
+  'cart-clear-confirm': () => { S.cover.cart = []; S.cover.confirmClear = false; render(); toast('Liste de courses vidée'); },
+  'cart-remove-done': () => { const n = S.cover.cart.filter((i) => i.done).length;
+    S.cover.cart = S.cover.cart.filter((i) => !i.done); render(); toast(`${n} article${n > 1 ? 's' : ''} retiré${n > 1 ? 's' : ''}`); },
   'profile-toggle': (d) => { S.cover.profile[d.k] = !S.cover.profile[d.k]; render(); },
   // — espace protégé
   'tab': (d) => { S.tab = d.tab; render(); },
@@ -737,8 +787,8 @@ const actions = {
 };
 
 const inputs = {
-  'cover-search': (el) => { S.cover.query = el.value; const g = $('#recipe-grid'); if (g) g.innerHTML = coverGrid(); },
-  'persons': (el) => { const v = parseInt(el.value, 10); if (!isNaN(v)) S.cover.persons = Math.max(S.personsMin, Math.min(S.personsMax, v)); },
+  'cover-search': (el) => { S.cover.query = el.value; refreshGrid(); },
+  'persons': (el) => { const v = parseInt(el.value, 10); if (!isNaN(v)) { S.cover.persons = Math.max(S.personsMin, Math.min(S.personsMax, v)); } },
   'jtext': (el) => { S.ev.jtext = el.value; },
   'jdate': (el) => { S.ev.jdate = el.value; },
   'sms-text': (el) => { if (S.overlay) S.overlay.text = el.value; },
@@ -775,7 +825,7 @@ async function boot() {
   tickClock(); setInterval(tickClock, 30000);
   try {
     const [rec, st] = await Promise.all([api('/api/cover/recipes'), api('/api/setup/status')]);
-    S.recipes = rec.recipes; S.categories = rec.categories;
+    S.recipes = rec.recipes; S.daily = rec.daily; S.categories = rec.categories;
     S.personsMin = st.persons_min; S.personsMax = st.persons_max;
     S.mode = st.configured ? 'cover' : 'setup';
   } catch (e) {
