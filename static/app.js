@@ -132,7 +132,10 @@ async function api(path, { method = 'GET', body, form } = {}) {
   if (S.token) headers['X-Abri-Token'] = S.token;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const res = await fetch(path, { method, headers, body: form ? form : (body !== undefined ? JSON.stringify(body) : undefined) });
-  if (res.status === 401 && S.mode === 'app') { lock(false); throw new Error('verrouillé'); }
+  if (res.status === 401 && (S.mode === 'app' || (S.mode === 'setup' && S.token))) {   // session expirée (serveur redémarré)
+    S.setup = { step: 0, recipe: null, persons: 4, fromSettings: false };
+    lock(false); throw new Error(t('Session expirée : rouvrez Abri et recommencez'));
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || t('Erreur {n}', { n: res.status }));
   return data;
@@ -416,7 +419,7 @@ function renderSetup() {
     <p class="lead">${t('Il ne sera plus affiché en clair, sauf dans les réglages de l\'espace protégé.')}</p>
     <div class="secret-card"><div class="em">${r.emoji}</div><div class="l1">${esc(r.name)}</div><div class="l2">${tn(st.persons, 'pour {n} personne', 'pour {n} personnes')}</div></div>
     <div class="how"><div class="n">${LI.home}</div><p>${t('Ouvrir « Petits Plats » → <b>{recipe}</b> → saisir <b>{n}</b> → <b>Adapter les quantités</b>.', { recipe: esc(r.name), n: st.persons })}</p></div>
-    ${quickTip(t('dans l\'onglet <b>Favoris</b>, garder le doigt appuyé sur <b>n\'importe quelle recette</b>'))}
+    ${quickTip(t('sur l\'accueil des recettes, garder le doigt appuyé <b>3 secondes</b> sur <b>« Bonjour »</b>'))}
     <div class="grow"></div>
     <button class="btn primary block" data-action="setup-finish">${st.fromSettings ? t('Enregistrer') : t('C\'est compris, terminer')}</button>
     ${dots}</div>`;
@@ -453,9 +456,9 @@ function renderWikiSetup() {
     <button class="icon-btn" data-action="setup-prev">${LI.back}</button>
     <h2>${t('Retenez votre mot')}</h2>
     <p class="lead">${t('Il reste visible dans les Réglages d\'{app}, et nulle part ailleurs.', { app: APP_NAME })}</p>
-    <div class="secret-card"><div class="em wk-em">${LI.search}</div><div class="l1">${esc(st.word.trim())}</div><div class="l2">${t('dans la recherche de Wikipédia')}</div></div>
+    <div class="secret-card"><div class="em wk-em">${WI.search}</div><div class="l1">${esc(st.word.trim())}</div><div class="l2">${t('dans la recherche de Wikipédia')}</div></div>
     <div class="how"><div class="n">${LI.wiki}</div><p>${t('Ouvrir l\'app → <b>loupe</b> → taper <b>{word}</b> → <b>Entrée</b>.', { word: esc(st.word.trim()) })}</p></div>
-    ${quickTip(t('sur l\'accueil de Wikipédia, garder le doigt appuyé sur <b>le titre de l\'article</b>'))}
+    ${quickTip(t('sur l\'accueil de Wikipédia, garder le doigt appuyé <b>3 secondes</b> sur <b>le titre de l\'article</b>'))}
     <div class="grow"></div>
     <button class="btn primary block" data-action="wsetup-finish" ${st.busy ? 'disabled' : ''}>${st.busy ? t('Un instant…') : st.activate ? t('Utiliser l\'apparence Wikipédia') : t('Enregistrer le mot')}</button>
     ${dots}</div>`;
@@ -930,7 +933,6 @@ async function quizEvaluate() {
 
 // --- 4c. Position : figer, carte des lieux d'aide, vérification du téléphone ---
 const scanSteps = () => [t('Qui voit votre position…'), t('Applis qui vous surveillent…'), t('Appareils connectés à votre compte…'), t('Traqueurs près de vous…')];
-const PLATFORMS = { iphone: 'iPhone', android: 'Android' };
 const YOU_REAL = [46.5197, 6.6323];       // position (simulée) : centre de Lausanne
 const YOU_FROZEN = [46.5225, 6.6349];     // place de la Riponne
 
@@ -980,7 +982,6 @@ function appLocation() {
     <div class="section-title">${t('Mon téléphone')}</div>
     <div class="card"><div class="row between" style="margin-bottom:6px"><h3 style="margin:0">${t('Vérification rapide')}</h3><span class="tiny muted">${t('démo · simulée')}</span></div>${scanBlock}</div>
     <div class="row between" style="margin:14px 0 8px"><b class="small">${t('Points à vérifier')}</b><span class="muted small">${t('{n} sur {total} faits', { n: A.n_done, total: A.n_total })}</span></div>
-    <div class="segmented" style="margin-top:0">${Object.entries(PLATFORMS).map(([id, label]) => `<button class="${L.platform === id ? 'active' : ''}" data-action="loc-platform" data-platform="${id}">${label}</button>`).join('')}</div>
     ${A.groups.map(group).join('')}
     ${A.quick[L.platform] ? `<div class="card highlight-card"><h3>${t('Tout couper d\'un coup')}</h3><p class="small muted">${esc(A.quick[L.platform])}</p></div>` : ''}
     <div class="card"><h3>${t('Bon à savoir')}</h3><ul class="info-list">${A.tips.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>
@@ -1299,8 +1300,8 @@ function drawOverlay() {
     const active = `<span class="pill on">${t('Actif')}</span>`;
     const FEAT_ICON = { face_id: ['faceid', 'lavande'], emergency_recording: ['video', 'rose'] };
     const featDesc = (key, f) => (key !== 'face_id' ? f.desc : wikiOn
-      ? t('Sur l\'accueil de Wikipédia, gardez le doigt appuyé sur le titre de l\'article : Face ID ouvre Abri, sans mot secret.')
-      : t('Dans l\'onglet Favoris, gardez le doigt appuyé sur une recette : Face ID ouvre Abri, sans code secret.'));
+      ? t('Sur l\'accueil de Wikipédia, gardez le doigt appuyé 3 secondes sur le titre de l\'article : Face ID ouvre Abri, sans mot secret.')
+      : t('Sur l\'accueil des recettes, gardez le doigt appuyé 3 secondes sur « Bonjour » : Face ID ouvre Abri, sans code secret.'));
     const featRow = ([key, f]) => (f.hidden ? '' : row(...(FEAT_ICON[key] || ['sparkle', 'rose']), `${esc(f.label)} ${tag(f.status)}`, esc(featDesc(key, f)),
       `<button class="switch ${P[key] ? 'on' : ''}" data-action="pref-toggle" data-key="${esc(key)}" aria-label="${esc(f.label)}"></button>`));
     const word = cfg.wiki_word
@@ -1432,8 +1433,8 @@ async function chatSend(raw) {
 }
 
 // --- Face ID (simulation) : ouverture rapide depuis l'apparence publique -----
-// Geste : appui long sur une recette des favoris, ou sur le titre de l'accueil de Wikipédia
-// (voir pressTarget). Une vraie app utiliserait la biométrie du téléphone ; ici l'animation
+// Geste : 3 secondes sur « Bonjour » (accueil des recettes), ou sur le titre de l'accueil de
+// Wikipédia (voir pressTarget). Une vraie app utiliserait la biométrie du téléphone ; ici l'animation
 // est simulée, puis /api/cover/quick délivre le jeton si l'option est activée.
 let faceIdBusy = false;
 async function startFaceId() {
@@ -1584,7 +1585,7 @@ const actions = {
     renderOverlay();
     const f = (S.boot.features || {})[d.key] || {};
     toast(!on ? t('Désactivé') : f.status === 'placeholder' ? t('Enregistré — fonctionnalité pas encore disponible')
-      : d.key === 'face_id' ? (S.front === 'wiki' ? t('Activé : appui long sur le titre de l\'accueil') : t('Activé : appui long sur une recette favorite')) : t('Activé'));
+      : d.key === 'face_id' ? (S.front === 'wiki' ? t('Activé : 3 secondes sur le titre de l\'accueil') : t('Activé : 3 secondes sur « Bonjour »')) : t('Activé'));
   },
   'reset-ask': () => confirmBox(t('Réinitialiser la démo ?'), t('Le code secret, les preuves, le journal et les résultats seront effacés. L\'application repartira du premier lancement.'), t('Tout effacer'), async () => {
     try { await api('/api/app/reset', { method: 'POST' }); } catch (e) { /* le jeton est déjà invalide */ }
@@ -1634,7 +1635,6 @@ const actions = {
   },
   // — position
   'scan': startScan,
-  'loc-platform': (d) => { S.loc.platform = d.platform; render(); },
   'group-toggle': (d) => { S.loc.groups[d.group] = !S.loc.groups[d.group]; render(); },
   'audit-open': (d) => { S.loc.open[d.item] = !S.loc.open[d.item]; render(); },
   'audit-toggle': (d) => toggleAudit(d.item),
@@ -1768,17 +1768,18 @@ overlaysEl.addEventListener('pointerout', (e) => { if (e.target.closest('[data-h
 ['pointerup', 'pointercancel'].forEach((ev) => document.addEventListener(ev, holdEnd));
 overlaysEl.addEventListener('contextmenu', (e) => { if (e.target.closest('[data-hold]')) e.preventDefault(); });
 
-// Ouverture rapide « Face ID » : appui long sur une recette des favoris (app de cuisine) ou sur
-// le titre de l'accueil (Wikipédia). Rien ne se passe si l'option n'est pas activée dans les
-// Réglages d'Abri : un appui long ordinaire, puis le relâcher, ouvre simplement la recette.
+// Ouverture rapide « Face ID » : garder le doigt 3 secondes sur « Bonjour » (accueil des recettes)
+// ou sur le titre de l'accueil (Wikipédia). Rien ne se passe si l'option n'est pas activée dans
+// les Réglages d'Abri : « Bonjour » reste un simple texte.
+const PRESS_MS = 3000;
 let pressTimer = null;
 let pressFired = false;                    // l'appui long a lancé Face ID : on ignore le clic qui suit
 const pressTarget = (t) => S.quick && (
-  (S.mode === 'cover' && S.cover.tab === 'favoris' && !S.cover.recipe && t.closest('.recipe-card') && !t.closest('.fav'))
+  (S.mode === 'cover' && S.cover.tab === 'recettes' && !S.cover.recipe && t.closest('.cover-hero .greet'))
   || (S.mode === 'wiki' && t.closest('.wk-title.wk-home')));
 function pressStart(target) {
   clearTimeout(pressTimer); pressFired = false;
-  if (pressTarget(target)) pressTimer = setTimeout(() => { pressFired = true; startFaceId(); }, 650);
+  if (pressTarget(target)) pressTimer = setTimeout(() => { pressFired = true; startFaceId(); }, PRESS_MS);
 }
 const pressEnd = () => clearTimeout(pressTimer);
 screen.addEventListener('touchstart', (e) => pressStart(e.target), { passive: true });

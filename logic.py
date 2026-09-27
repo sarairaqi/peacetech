@@ -157,8 +157,8 @@ FEATURES = {
     },
     "face_id": {
         "label": "Ouverture rapide (Face ID)",
-        "desc": "Gardez le doigt appuyé sur une recette de vos favoris (ou sur le titre de l'accueil de "
-                "Wikipédia) : Face ID ouvre Abri sans passer par le code secret.",
+        "desc": "Gardez le doigt appuyé 3 secondes sur « Bonjour », sur l'accueil des recettes (ou sur le "
+                "titre de l'accueil de Wikipédia) : Face ID ouvre Abri sans passer par le code secret.",
         # 'demo' = animation Face ID simulée ; une vraie app utiliserait la biométrie du téléphone.
         "status": "demo",
         "default": False,

@@ -96,9 +96,9 @@ dans `templates/index.html`.
     Wikipédia, que l'on peut afficher), ouverture rapide, sécurité, réinitialisation. Changer une
     option met la feuille à jour sur place, sans la faire réapparaître. Comme toutes les feuilles
     (ajout de preuve, guides…), elle se referme en la glissant vers le bas.
-13. **Face ID** (Réglages → « Ouverture rapide ») — dans l'onglet **Favoris** des recettes, garder
-    le doigt appuyé sur n'importe quelle recette (avec l'apparence Wikipédia : sur le titre de
-    l'accueil) : animation Face ID (simulée) et Abri s'ouvre sans code secret.
+13. **Face ID** (Réglages → « Ouverture rapide ») — sur l'accueil des recettes, garder le doigt
+    appuyé **3 secondes sur « Bonjour »** (avec l'apparence Wikipédia : sur le titre de l'accueil) :
+    animation Face ID (simulée) et Abri s'ouvre sans code secret.
 14. **Apparence Wikipédia** — Réglages → « Apparence de l'app » → Wikipédia : un petit accueil
     explique le principe, fait choisir un mot secret puis le rappelle. L'app devient un miroir de
     Wikipédia dans la langue choisie (vrais articles, recherche) ; taper le mot secret dans la

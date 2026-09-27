@@ -14,6 +14,7 @@ les quantités, comme n'importe quelle app de cuisine.
 from __future__ import annotations
 
 import argparse
+import json
 import io
 from functools import wraps
 
@@ -27,8 +28,37 @@ import wikimirror as W
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 Mo par fichier
 
-# Jetons de session valides (en mémoire : un redémarrage du serveur verrouille tout).
-_sessions: set[str] = set()
+# Jetons de session valides. Gardés dans storage/sessions.json : en mode debug, Flask redémarre
+# à chaque modification d'un fichier .py, et un jeton perdu verrouillait Abri en pleine
+# utilisation (« verrouillé » au milieu d'un réglage). Le fichier est ignoré par git.
+class _Sessions:
+    def __init__(self):
+        self._path = L.STORAGE_DIR / "sessions.json"
+
+    def _load(self) -> set:
+        try:
+            return set(json.loads(self._path.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return set()
+
+    def _save(self, tokens: set) -> None:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.write_text(json.dumps(sorted(tokens)), encoding="utf-8")
+
+    def __contains__(self, token) -> bool:
+        return token in self._load()
+
+    def add(self, token: str) -> None:
+        self._save(self._load() | {token})
+
+    def discard(self, token) -> None:
+        self._save(self._load() - {token})
+
+    def clear(self) -> None:
+        self._save(set())
+
+
+_sessions = _Sessions()
 
 
 def _token_from_request() -> str | None:
