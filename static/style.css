@@ -361,23 +361,46 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 .exit-btn svg { width: 15px; height: 15px; color: var(--a-primary); }
 
 /* Barre « Ma position » : présente en haut de chaque page, un geste pour figer */
-.pos-bar { display: flex; align-items: center; gap: 10px; margin: 4px 16px 12px; padding: 10px 10px 10px 12px; border-radius: 20px;
+/* Le bouton garde la même taille figée ou non ; la barre fait au moins 82 px et s'allonge
+   si besoin, pour que le texte « figée » soit lu en entier */
+.pos-bar { display: flex; align-items: center; gap: 10px; min-height: 82px; margin: 4px 0 12px; padding: 10px 10px 10px 12px; border-radius: 20px;
   background: linear-gradient(135deg, rgba(255, 158, 196, .16), rgba(255, 191, 155, .08)); border: 1.5px solid rgba(255, 158, 196, .45);
   box-shadow: 0 6px 20px rgba(255, 158, 196, .12); transition: background .25s, box-shadow .25s, border-color .25s; }
-.pos-bar .pos-main { flex: 1; display: flex; align-items: center; gap: 10px; text-align: left; color: var(--a-text); min-width: 0; }
-.pos-bar .ic { width: 42px; height: 42px; border-radius: 14px; }
-.pos-bar .ic svg.i { width: 21px; height: 21px; }
-.pos-bar b { display: block; font-size: 15px; line-height: 1.15; }
-.pos-bar small { display: block; font-size: 11.5px; color: var(--a-muted); margin-top: 3px; line-height: 1.3; }
-.pos-btn { flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-width: 76px; padding: 8px 10px; border-radius: 14px;
-  background: linear-gradient(135deg, var(--a-primary), #ff8bb8); color: #2a1030; box-shadow: 0 6px 16px rgba(255, 158, 196, .35); line-height: 1; }
-.pos-btn svg.i { width: 17px; height: 17px; stroke-width: 2.2; margin-bottom: 2px; }
-.pos-btn span { font-size: 13.5px; font-weight: 900; }
-.pos-btn small { font-size: 9px; font-weight: 700; opacity: .75; }
+.pos-bar > .ic { flex: none; width: 42px; height: 42px; border-radius: 14px; }
+.pos-bar > .ic svg.i { width: 21px; height: 21px; }
+.pos-txt { flex: 1; min-width: 0; color: var(--a-text); }
+.pos-txt b { display: block; font-size: 15px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pos-txt small { display: block; font-size: 11.5px; color: var(--a-muted); margin-top: 3px; line-height: 1.3; }
+.pos-btn { flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 84px; height: 58px; padding: 6px 6px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--a-primary), #ff8bb8); color: #2a1030; box-shadow: 0 6px 16px rgba(255, 158, 196, .35); line-height: 1; text-align: center; }
+.pos-btn .pb-main { display: flex; align-items: center; gap: 4px; }
+.pos-btn svg.i { width: 16px; height: 16px; stroke-width: 2.2; }
+.pos-btn .pb-main span { font-size: 13.5px; font-weight: 900; }
+.pos-btn small { display: block; flex: none; font-size: 9px; font-weight: 700; line-height: 1.15; opacity: .75; }
 .pos-btn.on { background: linear-gradient(135deg, var(--a-lav), #9d86e8); color: #1e1230; box-shadow: 0 6px 16px rgba(196, 176, 255, .35); }
 .pos-btn:active { transform: scale(.96); }
 .pos-bar.on { background: linear-gradient(135deg, rgba(196, 176, 255, .22), rgba(255, 158, 196, .1)); border-color: rgba(196, 176, 255, .55); box-shadow: 0 0 0 4px rgba(196, 176, 255, .1); }
-.pos-bar.on small { color: var(--a-lav); }
+.pos-bar.on .pos-txt small { color: var(--a-lav); }
+
+/* Coffre : sauvegarde dans le cloud privé */
+.cloud-card { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; margin: 0 0 12px; border-radius: 16px;
+  background: rgba(125, 220, 181, .1); border: 1px solid rgba(125, 220, 181, .3); color: var(--a-text); }
+.cloud-card > svg.i { flex: none; width: 24px; height: 24px; color: var(--ok); }
+.cloud-card b { display: block; font-size: 14px; }
+.cloud-card span { display: block; margin-top: 2px; font-size: 12.5px; line-height: 1.4; color: var(--a-muted); }
+
+/* Dernier recours « je suis partie » : entrée discrète, puis feuille en deux étapes */
+.depart-entry { display: block; margin: 22px auto 6px; padding: 8px 12px; font-size: 11.5px; color: var(--a-muted); opacity: .45; }
+.depart-sheet .info-list { margin: 0 0 12px; }
+.hold-btn { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; width: 100%; height: 56px; border-radius: 16px;
+  background: var(--sos); color: #fff; font-weight: 900; font-size: 15px; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.hold-btn i { position: absolute; inset: 0; background: rgba(255, 255, 255, .28); transform: scaleX(0); transform-origin: left; }
+.hold-btn.holding i { transform: scaleX(1); transition: transform 3s linear; }
+.hold-btn span { position: relative; }
+.dp-done { list-style: none; margin: 12px 0; padding: 0; }
+.dp-done li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--a-border); font-size: 14px; line-height: 1.35; }
+.dp-done li:last-child { border-bottom: 0; }
+.dp-done svg.i { flex: none; width: 18px; height: 18px; color: var(--ok); }
 .switch.lu { flex: none; width: 46px; height: 27px; background: #4a3a63; }
 .switch.lu::after { width: 21px; height: 21px; }
 .switch.lu.on { background: var(--a-lav); }
@@ -1178,9 +1201,17 @@ body:has(.phone.on-wiki) .stage-hint { color: #54595d; font-weight: 400; }
 .lang-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 4px 0 12px; }
 .lang-list button { padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--border); color: inherit; font: inherit; font-size: 14px; font-weight: 700; text-align: left; }
 .lang-list button.on { border-color: var(--primary); color: var(--primary); }
-.lang-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 0 0 12px; }
-.lang-chips button { padding: 6px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 700; background: var(--a-surface-2); color: var(--a-muted); border: 1.5px solid transparent; }
-.lang-chips button.on { color: var(--a-text); border-color: var(--a-primary); }
 .lang-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .lang-pick button { padding: 10px 6px; border-radius: 12px; background: var(--a-surface-2); color: var(--a-text); font-size: 12.5px; font-weight: 800; border: 1.5px solid transparent; }
 .lang-pick button.on { border-color: var(--a-primary); background: rgba(255, 158, 196, .1); }
+
+/* Accueil (premier lancement) : sélecteur de langue en haut de l'écran */
+.lang-select { position: relative; align-self: flex-end; display: inline-flex; align-items: center; gap: 6px; margin: 0 0 10px; padding: 7px 10px 7px 12px; border-radius: 999px; background: var(--a-surface-2); color: var(--a-text); font-size: 13px; font-weight: 700; cursor: pointer; }
+.lang-select .i { width: 16px; height: 16px; flex: none; }
+.lang-select .i:first-child { color: var(--a-primary); }
+.lang-select span { color: var(--a-muted); }
+.lang-select select { appearance: none; -webkit-appearance: none; background: transparent; border: 0; color: inherit; font: inherit; padding: 0; cursor: pointer; }
+.lang-select select option { color: #1f1730; }
+
+/* Feuille redessinée sur place (réglage modifié) : pas de nouvelle animation d'entrée */
+.overlay.still, .overlay.still .sheet, .overlay.still .confirm-box { animation: none; }

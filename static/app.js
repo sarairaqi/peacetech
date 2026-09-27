@@ -375,7 +375,8 @@ function renderSetup() {
   const dots = `<div class="dots">${[0, 1, 2, 3].map((n) => `<i class="${n === st.step ? 'on' : ''}"></i>`).join('')}</div>`;
   if (st.step === 0) {
     return `<div class="setup fade-in">
-      ${st.fromSettings ? '' : langButtons('lang-chips')}
+      ${st.fromSettings ? '' : `<label class="lang-select">${LI.globe}<span>${t('Langue')}</span>
+        <select data-input="lang-select" aria-label="${t('Langue')}">${L10N.langs.map((l) => `<option value="${esc(l.code)}" ${l.code === L10N.lang ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select>${LI.chevD}</label>`}
       <div class="logo">${LOGO}</div>
       <h1>${st.fromSettings ? t('Modifier votre accès discret') : t('Bienvenue dans Abri')}</h1>
       <p class="lead">${t('Abri se cache derrière une application de cuisine ordinaire, « Petits Plats ». Personne ne peut deviner que l\'espace protégé existe.')}</p>
@@ -721,6 +722,7 @@ const LI = {
   sparkle: svg('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>'),
   alert: svg('<path d="M12 3.5l9 16H3z"/><path d="M12 10v4.5M12 17.2v.3"/>'),
   info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>'),
+  cloud: svg('<path d="M7 18.5a4.5 4.5 0 01-.6-9A6 6 0 0118 8.5a4.9 4.9 0 01-.5 10z"/><path d="M9.5 13.5l2 2 3.5-3.5"/>'),
   siren: svg('<path d="M6 19v-6a6 6 0 0112 0v6"/><path d="M3 19h18M12 3v2M4.5 6.5L6 8M19.5 6.5L18 8"/>'),
   pen: svg('<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13 7l4 4"/>'),
   idcard: svg('<rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="9" cy="11" r="2"/><path d="M6 16a3 3 0 016 0M14 10h4M14 13.5h4"/>'),
@@ -772,13 +774,12 @@ function renderApp() {
       <button class="icon-btn" data-action="settings" title="${t('Réglages')}" aria-label="${t('Réglages')}">${LI.gear}</button>
       <button class="exit-btn" data-action="quick-exit" title="${t('Ferme l\'espace protégé immédiatement')}">${LI.exit}${backLabel}</button>
     </div>
-    ${posBar()}
-    <div class="content">${tabs[current]()}</div>
+    <div class="content">${current === 'home' ? homeHero() : ''}${posBar()}${tabs[current]()}</div>
     <button class="robot-fab" data-action="chat-open" aria-label="${t('Assistant')}" title="${t('Assistant')}">${LI.robot}</button>
     <div class="bottombar lu-tabbar">
-      ${tab('home', 'home', t('Accueil'))}${tab('quiz', 'list', t('Situation'))}
+      ${tab('home', 'home', t('Accueil'))}${tab('loc', 'pin', t('Position'))}
       <div class="sos-slot"><button class="sos-btn" data-action="sos">SOS<small>${t('POLICE 117')}</small></button></div>
-      ${tab('loc', 'pin', t('Position'))}${tab('ev', 'folder', t('Coffre'))}
+      ${tab('quiz', 'list', t('Situation'))}${tab('ev', 'folder', t('Coffre'))}
     </div>
   </div>`;
 }
@@ -786,14 +787,13 @@ function renderApp() {
 // Barre « Ma position », en haut de chaque page : un geste pour figer / rendre visible
 function posBar() {
   const on = isFrozen(); const at = (S.boot.prefs_at || {}).freeze_location;
+  // Un seul bouton (pos-btn) ; la barre et le bouton gardent la même taille figée ou non
   return `<div class="pos-bar ${on ? 'on' : ''}">
-    <button class="pos-main" data-action="tab" data-tab="loc" title="${t('Voir la page Position')}">
-      <span class="ic ${on ? 'tone-lavande' : 'tone-rose'}">${on ? LI.lock : LI.pin}</span>
-      <span style="min-width:0"><b>${on ? t('Position figée') : t('Figer ma position')}</b>
-        <small>${on ? `${t('Les applis et les personnes qui vous suivent voient {place}, pas vos déplacements', { place: esc(FREEZE_PLACE) })}${at ? ` · ${t('depuis {time}', { time: fmtTime(at) })}` : ''}.`
-                    : t('Les applis et les personnes qui vous suivent verront un lieu fixe, pas vos déplacements.')}</small></span>
-    </button>
-    <button class="pos-btn ${on ? 'on' : ''}" data-action="freeze-toggle" aria-label="${on ? t('Rendre ma position réelle') : t('Figer ma position')}">${on ? `${LI.lock}<span>${t('Figée')}</span><small>${t('toucher pour rétablir')}</small>` : `${LI.lock}<span>${t('Figer')}</span><small>${t('en un geste')}</small>`}</button>
+    <span class="ic ${on ? 'tone-lavande' : 'tone-rose'}">${on ? LI.lock : LI.pin}</span>
+    <div class="pos-txt"><b>${on ? t('Position figée') : t('Figer ma position')}</b>
+      <small>${on ? `${t('Les applis et les personnes qui vous suivent voient {place}, pas vos déplacements', { place: esc(FREEZE_PLACE) })}${at ? ` · ${t('depuis {time}', { time: fmtTime(at) })}` : ''}.`
+                  : t('Les applis et les personnes qui vous suivent verront un lieu fixe, pas vos déplacements.')}</small></div>
+    <button class="pos-btn ${on ? 'on' : ''}" data-action="freeze-toggle" aria-pressed="${on}" aria-label="${on ? t('Rendre ma position réelle') : t('Figer ma position')}"><span class="pb-main">${LI.lock}<span>${on ? t('Figée') : t('Figer')}</span></span>${on ? `<small>${t('toucher pour rétablir')}</small>` : ''}</button>
   </div>`;
 }
 
@@ -809,14 +809,18 @@ async function toggleFreeze() {
 }
 
 // --- 4a. Accueil = les contacts --------------------------------------------
+// Salutation de l'accueil : affichée tout en haut, au-dessus de la barre « Figer ma position »
+function homeHero() {
+  const hour = new Date().getHours();
+  const greet = hour < 6 ? t('Bonne nuit') : hour < 12 ? t('Bonjour') : hour < 18 ? t('Bon après-midi') : t('Bonsoir');
+  return `<div class="hero compact fade-in"><div class="h-greet">${greet}</div><h2>${t('Vous êtes en sécurité ici.')}</h2>
+      <p>${t('Espace invisible depuis le téléphone. « {back} » le referme aussitôt.', { back: S.front === 'wiki' ? t('Retour à Wikipédia') : t('Retour en cuisine') })}</p></div>`;
+}
+
 function appHome() {
   const B = S.boot; const H = S.home;
   const rec = B.last_result ? B.last_result.contacts.filter((c) => !c.pinned) : [];
-  const hour = new Date().getHours();
-  const greet = hour < 6 ? t('Bonne nuit') : hour < 12 ? t('Bonjour') : hour < 18 ? t('Bon après-midi') : t('Bonsoir');
   return `<div class="fade-in">
-    <div class="hero compact"><div class="h-greet">${greet}</div><h2>${t('Vous êtes en sécurité ici.')}</h2>
-      <p>${t('Espace invisible depuis le téléphone. « {back} » le referme aussitôt.', { back: S.front === 'wiki' ? t('Retour à Wikipédia') : t('Retour en cuisine') })}</p></div>
     ${B.last_result ? '' : `<button class="tile wide" data-action="tab" data-tab="quiz"><span class="ic tone-lavande">${LI.list}</span><div><b>${t('Faire le point sur ma situation')}</b><small>${t('22 questions oui / non, 3 minutes. {app} vous oriente ensuite.', { app: APP_NAME })}</small></div><span class="chev">${LI.chevR}</span></button>`}
     ${rec.length ? `<div class="section-title">${t('Recommandés pour vous')}</div>${rec.map(contactCard).join('')}` : ''}
     <div class="section-title">${t('À qui parler — services vaudois')}</div>
@@ -932,7 +936,7 @@ const YOU_FROZEN = [46.5225, 6.6349];     // place de la Riponne
 
 function appLocation() {
   const L = S.loc; const A = S.boot.audit; const B = S.boot; const types = B.office_types;
-  const on = isFrozen(); const at = (B.prefs_at || {}).freeze_location;
+  const on = isFrozen();
   const byId = Object.fromEntries(A.items.map((i) => [i.id, i]));
   const sel = B.offices.find((o) => o.id === L.selected);
   const card = sel ? `<div class="office-card">
@@ -967,21 +971,20 @@ function appLocation() {
   const group = (g) => { const items = A.items.filter((i) => i.group === g.id); const nd = items.filter((i) => A.done[i.id]).length; const open = !!L.groups[g.id];
     return `<button class="group-head ${open ? 'open' : ''}" data-action="group-toggle" data-group="${esc(g.id)}">${ic(LOC_GROUP_ICON[g.id] || 'eye', LOC_GROUP_TONE[g.id] || 'rose')}<span class="gh-t">${esc(g.title)}</span><span class="n">${nd}/${items.length}</span><span class="chev">${LI.chevR}</span></button>${open ? items.map(item).join('') : ''}`; };
 
-  return `<div class="fade-in"><div class="page-title">${t('Ma position')}</div><p class="page-sub">${t('Décidez qui peut savoir où vous êtes.')}</p>
-    <div class="freeze-card ${on ? 'on' : ''}"><div class="fc-row">${ic(on ? 'lock' : 'pin', on ? 'lavande' : 'rose')}<div><b>${on ? t('Position figée') : t('Figer ma position')}</b><small>${on ? `${t('Les applis et les personnes qui vous suivent voient {place}', { place: esc(FREEZE_PLACE) })}${at ? ` ${t('depuis {time}', { time: fmtTime(at) })}` : ''}.` : t('Les applis et les personnes qui vous suivent verront un lieu fixe, pas vos déplacements.')}</small></div><button class="pos-btn ${on ? 'on' : ''}" data-action="freeze-toggle" aria-label="${on ? t('Rendre ma position réelle') : t('Figer ma position')}">${LI.lock}<span>${on ? t('Figée') : t('Figer')}</span><small>${on ? t('toucher pour rétablir') : t('en un geste')}</small></button></div>
-      <p>${on ? t('Vous pouvez bouger librement : rien ne change pour les personnes qui vous suivent. Désactivez pour revenir à votre position réelle.') : t('Utile avant un rendez-vous au Centre LAVI ou chez l\'avocat·e, ou pour préparer un départ.')}</p></div>
+  // Le bouton « Figer » est dans la barre en haut de la page (une seule fois par page)
+  return `<div class="fade-in"><div class="page-title">${t('Ma position')}</div><p class="page-sub">${t('Décidez qui peut savoir où vous êtes.')} ${on ? t('Vous pouvez bouger librement : rien ne change pour les personnes qui vous suivent. Désactivez pour revenir à votre position réelle.') : t('Utile avant un rendez-vous au Centre LAVI ou chez l\'avocat·e, ou pour préparer un départ.')}</p>
     <div class="section-title">${t('Où trouver de l\'aide près de vous')}</div>
     <div id="map-slot" class="map-slot"><div class="map-loading"><span class="spinner"></span> ${t('Chargement de la carte…')}</div></div>
     <div class="map-legend"><span><i class="dot" style="background:${on ? '#c4b0ff' : '#ff9ec4'}"></i>${on ? t('Position figée') : t('Vous')}</span>${Object.values(types).map((t) => `<span><i class="dot" style="background:${esc(t.color)}"></i>${esc(t.label)}</span>`).join('')}</div>
     ${card || `<p class="small muted" style="text-align:center;margin:0 0 12px">${t('Touchez un point pour voir l\'adresse et appeler.')}</p>`}
     <div class="section-title">${t('Mon téléphone')}</div>
     <div class="card"><div class="row between" style="margin-bottom:6px"><h3 style="margin:0">${t('Vérification rapide')}</h3><span class="tiny muted">${t('démo · simulée')}</span></div>${scanBlock}</div>
-    <div class="advice">${LI.alert}<span><b>${t('Avant de changer un réglage :')}</b> ${esc(A.warning)}<br><button class="btn soft sm" data-action="call" data-id="victimes142">${LI.phone} ${t('Appeler le 142')}</button></span></div>
     <div class="row between" style="margin:14px 0 8px"><b class="small">${t('Points à vérifier')}</b><span class="muted small">${t('{n} sur {total} faits', { n: A.n_done, total: A.n_total })}</span></div>
     <div class="segmented" style="margin-top:0">${Object.entries(PLATFORMS).map(([id, label]) => `<button class="${L.platform === id ? 'active' : ''}" data-action="loc-platform" data-platform="${id}">${label}</button>`).join('')}</div>
     ${A.groups.map(group).join('')}
     ${A.quick[L.platform] ? `<div class="card highlight-card"><h3>${t('Tout couper d\'un coup')}</h3><p class="small muted">${esc(A.quick[L.platform])}</p></div>` : ''}
     <div class="card"><h3>${t('Bon à savoir')}</h3><ul class="info-list">${A.tips.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>
+    <button class="depart-entry" data-action="depart-open">${t('Je suis partie · dernier recours')}</button>
   </div>`;
 }
 
@@ -1154,6 +1157,7 @@ function appEvidence() {
         <p class="ev-note">${LI.info}<span>${t('Le fichier est enregistré dans les téléchargements du téléphone. Supprimez-le après l\'avoir remis.')}</span></p></div>`;
   }
   return `<div class="fade-in ev"><div class="page-title">${t('Mon coffre')}</div><p class="page-sub">${t('Vos preuves, datées et rangées. Visibles seulement ici.')}</p>
+    <div class="cloud-card">${LI.cloud}<div><b>${t('Sauvegardé dans votre cloud privé')}</b><span>${t('Preuves et journal sont gardés hors du téléphone. S\'il est cassé, perdu ou confisqué, vous retrouvez tout depuis un autre appareil avec votre accès discret.')}</span></div></div>
     <div class="segmented ev-tabs">${seg('pieces', 'image', t('Preuves'), B.evidence.length)}${seg('journal', 'pen', t('Journal'), B.journal.length)}${seg('dossier', 'list', t('Dossier'), `${B.dossier.n_done}/${B.dossier.n_total}`)}</div>${body}</div>`;
 }
 
@@ -1222,7 +1226,21 @@ function appResources() {
 // ===========================================================================
 // 5. SUPERPOSITIONS : appel, message, réglages, feuille d'ajout, guide, Face ID, confirmation
 // ===========================================================================
+// Redessiner la même feuille (un interrupteur des Réglages, la langue…) ne doit pas la faire
+// réapparaître : pas d'animation d'entrée, et la feuille garde sa position de défilement.
+let overlayShown = null;
 function renderOverlay() {
+  const same = !!S.overlay && S.overlay.type === overlayShown && !!overlaysEl.firstChild;
+  const sheet = same && $('.sheet', overlaysEl);
+  const top = sheet ? sheet.scrollTop : 0;
+  drawOverlay();
+  overlayShown = S.overlay ? S.overlay.type : null;
+  if (!same || !overlaysEl.firstElementChild) return;
+  overlaysEl.firstElementChild.classList.add('still');
+  const sheet2 = $('.sheet', overlaysEl); if (sheet2) sheet2.scrollTop = top;
+}
+
+function drawOverlay() {
   clearInterval(callTimer);
   const O = S.overlay;
   if (!O) { overlaysEl.innerHTML = ''; return; }
@@ -1352,6 +1370,28 @@ function renderOverlay() {
     const log = $('#chat-log', overlaysEl); log.scrollTop = log.scrollHeight;
     return;
   }
+  if (O.type === 'depart') {
+    const steps = departSteps();
+    let body;
+    if (O.step === 'intro') body = `<div class="g-head">${ic('exit', 'sos', 'lg')}<h3>${t('Dernier recours : je suis partie')}</h3></div>
+      <p class="g-intro">${t('À utiliser une fois en sécurité, loin du domicile. {app} coupe d\'un coup ce qui permet de vous suivre :', { app: APP_NAME })}</p>
+      <ul class="info-list">${[t('recherche et désactive les applis de surveillance'), t('arrête tout partage ou recopie de l\'écran'), t('arrête le partage de position'), t('déconnecte les appareils inconnus de vos comptes')].map((s) => `<li>${s}</li>`).join('')}</ul>
+      <div class="advice">${LI.alert}<span><b>${t('Attention :')}</b> ${t('la personne qui vous surveillait verra que le partage s\'est arrêté. Ne le faites pas tant que vous êtes encore chez vous. Si possible, parlez-en d\'abord au 142 ou au Centre LAVI.')}</span></div>
+      <div class="g-acts"><button class="btn muted" data-action="overlay-close">${t('Annuler')}</button><button class="btn danger" data-action="depart-next">${t('Je suis en sécurité')}</button></div>`;
+    else if (O.step === 'hold') body = `<h3>${t('Confirmer')}</h3>
+      <p class="g-intro">${t('Maintenez le bouton appuyé 3 secondes pour lancer. Relâchez pour annuler.')}</p>
+      <button class="hold-btn" data-hold="depart"><i></i><span>${t('Maintenir pour tout couper')}</span></button>
+      <button class="btn muted block" data-action="overlay-close" style="margin-top:10px">${t('Annuler')}</button>`;
+    else if (O.step === 'run') body = `<h3>${t('Protection en cours…')}</h3>
+      <ul class="scan-steps">${steps.map((s, n) => `<li class="${n < O.n ? 'done' : ''}">${n < O.n ? '✓' : n === O.n ? '<span class="spinner"></span>' : '·'} ${s}</li>`).join('')}</ul>`;
+    else body = `<div class="row between"><h3 style="margin:0">${t('C\'est fait')}</h3><span class="tiny muted">${t('démo · simulée')}</span></div>
+      <ul class="dp-done">${departResults().map((s) => `<li>${LI.check}<span>${s}</span></li>`).join('')}</ul>
+      <div class="cloud-card">${LI.cloud}<div><b>${t('Vos preuves sont en sécurité')}</b><span>${t('Preuves et journal restent sauvegardés dans votre cloud privé, même si ce téléphone est cassé ou repris.')}</span></div></div>
+      <div class="advice">${LI.info}<span>${t('Depuis un autre appareil, changez aussi vos mots de passe (e-mail, compte Apple ou Google).')}<br><button class="btn soft sm" data-action="call" data-id="victimes142">${LI.phone} ${t('Appeler le 142')}</button></span></div>
+      <button class="btn primary block" data-action="overlay-close">${t('Terminé')}</button>`;
+    overlaysEl.innerHTML = `<div class="overlay dim" ${O.step === 'run' ? '' : 'data-action="overlay-close"'}><div class="sheet depart-sheet" data-stop><div class="grip"></div>${body}</div></div>`;
+    return;
+  }
   if (O.type === 'confirm') {
     overlaysEl.innerHTML = `<div class="overlay center" data-action="overlay-close"><div class="confirm-box" data-stop><h3>${esc(O.title)}</h3><p>${esc(O.text)}</p>
       <div class="row"><button class="btn muted block" data-action="overlay-close">${t('Annuler')}</button><button class="btn ${O.danger ? 'danger' : 'primary'} block" data-action="confirm-ok">${esc(O.ok)}</button></div></div></div>`;
@@ -1419,9 +1459,57 @@ function confirmBox(title, text, ok, onOk, danger = false) {
   S.overlay = { type: 'confirm', title, text, ok, onOk, danger }; renderOverlay();
 }
 
+// Dernier recours « je suis partie » (lien discret en bas de la page Position) : deux étapes
+// d'entrée (avertissement, puis appui maintenu 3 s) avant de tout couper. Démo simulée.
+const HOLD_MS = 3000;
+const departSteps = () => [t('Recherche des applis de surveillance…'), t('Arrêt du partage et de la recopie d\'écran…'), t('Arrêt du partage de position…'), t('Déconnexion des appareils inconnus…')];
+const departResults = () => [t('Appli de surveillance « Contrôle parental » désactivée'), t('Partage d\'écran arrêté'), t('Recopie de l\'écran vers un autre appareil arrêtée'), t('Partage de position avec 1 personne arrêté'), t('2 appareils inconnus déconnectés de votre compte')];
+function startDepart() {
+  const O = S.overlay; if (!O || O.type !== 'depart') return;
+  O.step = 'run'; O.n = 0; renderOverlay();
+  const iv = setInterval(() => {
+    if (S.overlay !== O) { clearInterval(iv); return; }
+    O.n++;
+    if (O.n >= departSteps().length) { clearInterval(iv); O.step = 'done'; }
+    renderOverlay();
+  }, 800);
+}
+let holdTimer = null;
+function holdStart(e) {
+  const b = e.target.closest('[data-hold]'); if (!b || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  e.preventDefault();
+  clearTimeout(holdTimer); b.classList.add('holding');
+  holdTimer = setTimeout(() => { holdTimer = null; if (b.dataset.hold === 'depart') startDepart(); }, HOLD_MS);
+}
+function holdEnd() {
+  if (!holdTimer) return;
+  clearTimeout(holdTimer); holdTimer = null;
+  $$('.hold-btn.holding', overlaysEl).forEach((b) => b.classList.remove('holding'));
+}
+
 // ===========================================================================
 // 6. ACTIONS (délégation d'événements)
 // ===========================================================================
+// Langue : enregistrée sur le serveur (comme l'apparence), puis recettes, contenus d'Abri et
+// Wikipédia sont rechargés dans la nouvelle langue, sans quitter l'écran en cours.
+async function setLang(code) {
+  if (!code || code === L10N.lang) return;
+  try {
+    applyLang(await api('/api/lang', { method: 'POST', body: { lang: code } }));
+    const rec = await api('/api/cover/recipes');
+    S.recipes = rec.recipes; S.daily = rec.daily;
+    if (S.cover.recipe) S.cover.recipe = findRecipe(S.cover.recipe.id) || S.cover.recipe;
+    if (S.token) {                  // dans Abri (ou en modifiant le code secret depuis Abri)
+      S.boot = await api('/api/app/bootstrap');
+      if (S.quiz.result) S.quiz.result = S.boot.last_result;
+      if (S.loc.scan) S.loc.scan = await api('/api/location/scan', { method: 'POST' });
+      if (!S.chat.messages.some((m) => m.from === 'me')) S.chat.messages = S.boot.assistant.greeting.map((text) => ({ from: 'bot', text }));
+    }
+  } catch (e) { toast(e.message); return; }
+  wikiCache.clear();
+  render(); if (S.overlay) renderOverlay();
+}
+
 const actions = {
   // — configuration
   'setup-next': () => { S.setup.step++; render(); },
@@ -1458,25 +1546,7 @@ const actions = {
     S.cover.cart = S.cover.cart.filter((i) => !i.done); render(); toast(tn(n, '{n} article retiré', '{n} articles retirés')); },
   'profile-toggle': (d) => { S.cover.profile[d.k] = !S.cover.profile[d.k]; render(); },
   'cover-lang': () => { S.cover.langOpen = !S.cover.langOpen; render(); },
-  // Langue : enregistrée sur le serveur (comme l'apparence), puis recettes, contenus d'Abri et
-  // Wikipédia sont rechargés dans la nouvelle langue, sans quitter l'écran en cours.
-  'lang-set': async (d) => {
-    if (d.lang === L10N.lang) return;
-    try {
-      applyLang(await api('/api/lang', { method: 'POST', body: { lang: d.lang } }));
-      const rec = await api('/api/cover/recipes');
-      S.recipes = rec.recipes; S.daily = rec.daily;
-      if (S.cover.recipe) S.cover.recipe = findRecipe(S.cover.recipe.id) || S.cover.recipe;
-      if (S.token) {                  // dans Abri (ou en modifiant le code secret depuis Abri)
-        S.boot = await api('/api/app/bootstrap');
-        if (S.quiz.result) S.quiz.result = S.boot.last_result;
-        if (S.loc.scan) S.loc.scan = await api('/api/location/scan', { method: 'POST' });
-        if (!S.chat.messages.some((m) => m.from === 'me')) S.chat.messages = S.boot.assistant.greeting.map((text) => ({ from: 'bot', text }));
-      }
-    } catch (e) { toast(e.message); return; }
-    wikiCache.clear();
-    render(); if (S.overlay) renderOverlay();
-  },
+  'lang-set': (d) => setLang(d.lang),
   // — espace protégé
   'tab': (d) => { S.tab = d.tab; render(); const c = $('.content', screen); if (c) c.scrollTop = 0; },
   // un seul domaine ouvert à la fois : ouvrir l'un referme les autres
@@ -1530,6 +1600,8 @@ const actions = {
   },
   'confirm-ok': () => { const fn = S.overlay && S.overlay.onOk; S.overlay = null; renderOverlay(); if (fn) fn(); },
   'overlay-close': () => { S.overlay = null; renderOverlay(); },
+  'depart-open': () => { S.overlay = { type: 'depart', step: 'intro' }; renderOverlay(); },
+  'depart-next': () => { if (S.overlay && S.overlay.type === 'depart') { S.overlay.step = 'hold'; renderOverlay(); } },
   'sheet-close': () => closeSheet(),
   'sos': () => openCall('police', true),
   'call': (d) => openCall(d.id),
@@ -1583,6 +1655,7 @@ const actions = {
 };
 
 const inputs = {
+  'lang-select': (el) => setLang(el.value),
   'wiki-q': (el) => { S.wiki.q = el.value; clearTimeout(wikiTimer);
     if (!norm(el.value)) { S.wiki.results = []; paintWikiResults(); return; }
     wikiTimer = setTimeout(() => wikiSearch(el.value), 200); },
@@ -1602,8 +1675,9 @@ const inputs = {
 function onClick(e) {
   const el = e.target.closest('[data-action]');
   if (!el) return;
-  // un clic à l'intérieur d'une feuille (data-stop) ne doit pas fermer la superposition
-  if (el.dataset.action === 'overlay-close' && e.target.closest('[data-stop]')) return;
+  // un clic à l'intérieur d'une feuille (data-stop) ne doit pas fermer la superposition —
+  // sauf sur un bouton « fermer » placé dans la feuille elle-même (Annuler, Terminé…)
+  if (el.dataset.action === 'overlay-close') { const stop = e.target.closest('[data-stop]'); if (stop && el.contains(stop)) return; }
   const fn = actions[el.dataset.action];
   if (fn) { if (el.tagName !== 'INPUT') e.preventDefault(); fn(el.dataset, el); }
 }
@@ -1614,6 +1688,7 @@ function onInput(e) {
 screen.addEventListener('click', onClick);
 overlaysEl.addEventListener('click', onClick);
 screen.addEventListener('input', onInput);
+screen.addEventListener('change', (e) => { if (e.target.matches('select[data-input]')) onInput(e); });   // listes déroulantes
 overlaysEl.addEventListener('input', onInput);
 overlaysEl.addEventListener('change', onInput);
 ['click', 'keydown', 'touchstart', 'input'].forEach((ev) => document.addEventListener(ev, () => { if (S.mode === 'app') resetIdle(); }, { passive: true }));
@@ -1687,6 +1762,11 @@ overlaysEl.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse
 document.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') dragMove(e.clientY, e); });
 document.addEventListener('pointerup', (e) => { if (e.pointerType === 'mouse') dragEnd(); });
 overlaysEl.addEventListener('click', (e) => { if (sheetDragged) { sheetDragged = false; e.stopImmediatePropagation(); } }, true);
+// Appui maintenu (dernier recours) : relâcher ou quitter le bouton annule
+overlaysEl.addEventListener('pointerdown', holdStart);
+overlaysEl.addEventListener('pointerout', (e) => { if (e.target.closest('[data-hold]') && !e.target.closest('[data-hold]').contains(e.relatedTarget)) holdEnd(); });
+['pointerup', 'pointercancel'].forEach((ev) => document.addEventListener(ev, holdEnd));
+overlaysEl.addEventListener('contextmenu', (e) => { if (e.target.closest('[data-hold]')) e.preventDefault(); });
 
 // Ouverture rapide « Face ID » : appui long sur une recette des favoris (app de cuisine) ou sur
 // le titre de l'accueil (Wikipédia). Rien ne se passe si l'option n'est pas activée dans les
