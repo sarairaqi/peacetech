@@ -129,10 +129,14 @@ peacetech/
 ├── static/wiki.js    # 5 articles de secours par langue (démo sans Internet)
 ├── static/demo-rec.* # démo FLAG_SECURE (panneau « enregistrement »), retirable
 ├── static/icon-*.png # icône « Petits Plats » (cahier de recettes vichy, cocotte)
+├── static/icon-wiki.svg   # icône utilisée avec l'apparence Wikipédia
 ├── static/abri-logo.png   # logo d'Abri (pour la présentation)
 ├── static/vendor/leaflet/  # Leaflet 1.9.4 (carte de l'onglet Position), chargé seulement
 │                     #   une fois Abri ouvert ; fonds de carte : OpenStreetMap
-└── storage/          # créé à l'usage : config.json, preuves, journal, favoris, langue (ignoré par git)
+└── storage/          # créé à l'usage (ignoré par git) : config.json (secrets), evidence/ +
+                      #   evidence.json (preuves), journal.json, location_audit.json,
+                      #   last_result.json (dernier questionnaire), prefs.json (réglages),
+                      #   favoris.json, lang.json
 ```
 
 Python a été choisi plutôt que Java : Flask tient en un fichier, l'upload de fichiers est
