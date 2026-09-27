@@ -29,6 +29,19 @@ python app.py --host 0.0.0.0
 Pour repartir de zéro (premier lancement, preuves effacées) : `python app.py --reset`
 ou, dans l'espace protégé, Réglages → « Réinitialiser la démo ».
 
+## Langues
+
+Français, English, Español, Português, Shqip, Schwiizerdütsch. La langue se choisit dans
+« Petits Plats » → Profil → Langue, sur l'écran d'accueil (premier lancement) ou dans Abri →
+Réglages ; elle s'applique à toute l'app (recettes, apparence Wikipédia, Abri, export ZIP).
+Les noms, catégories et régions des recettes sont traduits ; ingrédients et étapes restent en
+français. L'apparence Wikipédia suit la langue (en/es/pt/sq.wikipedia.org, als.wikipedia.org
+pour le suisse allemand).
+
+Les traductions sont dans `i18n/<code>.py`, indexées par le texte français : un texte ajouté
+en français reste simplement en français tant qu'il n'est pas traduit. Pour lister ce qui manque :
+`python -m i18n.check`.
+
 ## Scénario de démonstration (3 minutes)
 
 1. **Premier lancement** — l'assistant demande de choisir une recette secrète et un nombre

@@ -1,0 +1,63 @@
+/* ==========================================================================
+   DÉMO HACKATHON — simulation de FLAG_SECURE (enregistrement / partage d'écran)
+   Tout est HORS du téléphone. Pour retirer la démo : supprimer ce fichier,
+   static/demo-rec.js et leurs deux lignes dans templates/index.html.
+   ========================================================================== */
+
+/* Rangée : téléphone | panneau "ce que montre l'enregistrement" */
+.demo-row { display: flex; align-items: center; justify-content: center; gap: 48px; }
+
+/* Bouton de contrôle, dans l'espace vide en haut à gauche de la page */
+.demo-rec-btn {
+  position: fixed; top: 18px; left: 18px; z-index: 1000;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 16px; border-radius: 999px;
+  font: 700 14px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #1c1c22; color: #fff; border: 1px solid #3a3a44;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .35);
+}
+.demo-rec-btn:hover { background: #2a2a33; }
+.demo-rec-btn .dot { width: 10px; height: 10px; border-radius: 50%; background: #e5484d; }
+.demo-rec-btn.on { background: #e5484d; border-color: #e5484d; }
+.demo-rec-btn.on .dot { background: #fff; border-radius: 2px; }
+
+/* Libellés au-dessus du téléphone et du panneau */
+.demo-cap {
+  position: absolute; bottom: calc(100% + 6px); left: 0; right: 0;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  font: 600 12px/16px system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #9aa3b5; white-space: nowrap; pointer-events: none;
+}
+body:has(.phone:not(.on-abri)) .demo-cap { color: #6d3b26; }
+body:has(.phone.on-wiki) .demo-cap { color: #54595d; }
+
+/* Le libellé du téléphone n'apparaît que pendant l'enregistrement */
+.demo-phone-slot { position: relative; }
+.demo-phone-slot > .demo-cap { display: none; }
+body.demo-recording .demo-phone-slot > .demo-cap { display: flex; }
+
+/* Panneau noir : mêmes dimensions que .phone (recopiées en JS) */
+.demo-rec-panel { position: relative; display: none; }
+body.demo-recording .demo-rec-panel { display: block; }
+.demo-rec-screen {
+  background: #000; border-radius: 48px; border: 10px solid #101010;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .6), inset 0 0 0 2px #2a2a2a;
+}
+
+/* Indicateur REC */
+.demo-rec-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 4px; background: #e5484d; color: #fff;
+  font-weight: 800; letter-spacing: .06em; font-variant-numeric: tabular-nums;
+}
+.demo-rec-badge::before {
+  content: ""; width: 7px; height: 7px; border-radius: 50%; background: #fff;
+  animation: demo-rec-blink 1s steps(1) infinite;
+}
+@keyframes demo-rec-blink { 50% { opacity: 0; } }
+
+/* Sur un vrai téléphone (plein écran) : pas de démo */
+@media (max-width: 520px), (max-height: 700px) {
+  .demo-rec-btn, .demo-rec-panel, .demo-cap { display: none !important; }
+  .demo-row { display: contents; }
+}

@@ -20,6 +20,7 @@ from functools import wraps
 from flask import Flask, abort, jsonify, render_template, request, send_file
 
 import content as C
+import i18n as I
 import logic as L
 import wikimirror as W
 
@@ -52,7 +53,21 @@ def _unauthorized(_):
 
 @app.errorhandler(400)
 def _bad_request(e):
-    return jsonify({"error": str(getattr(e, "description", "requête invalide"))}), 400
+    return jsonify({"error": I.tr(str(getattr(e, "description", "requête invalide")), L.get_lang())}), 400
+
+
+# Langue : content.py et logic.py sont en français ; chaque réponse est traduite à la sortie
+# (i18n/<langue>.py). Les données de l'utilisateur (preuves, notes, journal) ne le sont jamais.
+def _tr(obj):
+    return I.translate(obj, L.get_lang())
+
+
+def _recipe(r):
+    return I.recipe(r, L.get_lang())
+
+
+def _wiki_site() -> str:
+    return I.wiki(L.get_lang())["site"]
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +76,7 @@ def _bad_request(e):
 
 @app.get("/")
 def index():
-    return render_template("index.html", wiki=L.get_front() == "wiki")
+    return render_template("index.html", wiki=L.get_front() == "wiki", i18n=I.client(L.get_lang()))
 
 
 @app.get("/manifest.json")
@@ -70,7 +85,8 @@ def manifest():
     # l'identité de l'application de cuisine.
     # L'apparence choisie dans Abri décide du nom et de l'icône de l'app installée.
     if L.get_front() == "wiki":
-        return jsonify({"name": "Wikipédia", "short_name": "Wikipédia", "start_url": "/",
+        brand = I.wiki(L.get_lang())["brand"]
+        return jsonify({"name": brand, "short_name": brand, "start_url": "/",
                         "display": "standalone", "background_color": "#ffffff", "theme_color": "#ffffff",
                         "icons": [{"src": "/static/icon-wiki.svg", "sizes": "any", "type": "image/svg+xml"}]})
     return jsonify({
@@ -93,10 +109,29 @@ def manifest():
 
 @app.get("/api/cover/recipes")
 def cover_recipes():
-    """Les 60 recettes fixes + les 2 recettes du jour."""
-    return jsonify({"recipes": [L.for_client(r) for r in C.RECIPES_FIXED],
-                    "daily": [L.for_client(r) for r in L.daily_recipes()],
+    """Les 60 recettes fixes + les 2 recettes du jour (nom, région, difficulté et durée traduits)."""
+    return jsonify({"recipes": [_recipe(L.for_client(r)) for r in C.RECIPES_FIXED],
+                    "daily": [_recipe(L.for_client(r)) for r in L.daily_recipes()],
                     "categories": C.RECIPE_CATEGORIES, "configured": L.is_configured()})
+
+
+@app.get("/api/i18n")
+def i18n_get():
+    """Textes de l'interface dans la langue choisie."""
+    return jsonify(I.client(L.get_lang()))
+
+
+@app.post("/api/lang")
+def lang_set():
+    """
+    Change la langue de l'app (profil des recettes, accueil ou Réglages d'Abri). Publique, comme
+    le choix de langue de n'importe quelle app : elle ne révèle rien de l'espace protégé.
+    """
+    data = request.get_json(silent=True) or {}
+    try:
+        return jsonify(I.client(L.set_lang(str(data.get("lang", "")))))
+    except ValueError as e:
+        abort(400, str(e))
 
 
 @app.post("/api/cover/adapt")
@@ -120,10 +155,22 @@ def cover_adapt():
     return jsonify(payload)
 
 
+@app.get("/api/cover/favs")
+def cover_favs():
+    return jsonify({"favs": L.get_favs()})
+
+
+@app.post("/api/cover/favs")
+def cover_favs_set():
+    data = request.get_json(silent=True) or {}
+    return jsonify({"favs": L.set_favs(data.get("favs"))})
+
+
 @app.post("/api/cover/quick")
 def cover_quick():
     """
-    Ouverture rapide « Face ID » (option des Réglages d'Abri). Dans ce prototype web, la
+    Ouverture rapide « Face ID » (option des Réglages d'Abri) : appui long sur une recette des
+    favoris, ou sur le titre de l'accueil de Wikipédia. Dans ce prototype web, la
     reconnaissance du visage est simulée par l'interface ; une vraie app passerait par la
     biométrie du téléphone (Face ID / empreinte) avant d'appeler cette route.
     """
@@ -153,7 +200,7 @@ def wiki_search():
         _sessions.add(token)
         return jsonify({**payload, "token": token, "results": []})
     try:
-        payload["results"] = W.search(q)
+        payload["results"] = W.search(q, _wiki_site())
     except W.MirrorOffline:
         payload.update(results=[], offline=True)
     return jsonify(payload)
@@ -162,7 +209,8 @@ def wiki_search():
 @app.get("/api/wiki/page")
 def wiki_page():
     try:
-        return jsonify(W.page(request.args.get("title", "")))
+        wiki = I.wiki(L.get_lang())
+        return jsonify(W.page(request.args.get("title", "") or wiki["home"], wiki["site"]))
     except W.MirrorOffline:
         return jsonify({"offline": True}), 503
     except LookupError as e:
@@ -172,7 +220,7 @@ def wiki_page():
 @app.get("/api/wiki/random")
 def wiki_random():
     try:
-        return jsonify({"title": W.random_title()})
+        return jsonify({"title": W.random_title(_wiki_site())})
     except W.MirrorOffline:
         return jsonify({"offline": True}), 503
 
@@ -215,27 +263,33 @@ def setup():
 def app_bootstrap():
     """Tout ce dont l'interface a besoin en un appel."""
     cfg = L.get_config()
+    public_cfg = None
+    if cfg:
+        public_cfg = {k: v for k, v in cfg.items() if k != "wiki_phrase"}   # l'empreinte reste côté serveur
+        public_cfg.update(recipe=_recipe(L.recipe_by_id(cfg["recipe_id"])), has_wiki=bool(cfg.get("wiki_phrase")))
     return jsonify({
-        "config": {**cfg, "recipe": L.recipe_by_id(cfg["recipe_id"])} if cfg else None,
-        "questionnaire": {"intro": C.QUESTIONNAIRE_INTRO, "sections": C.QUESTIONNAIRE,
-                          "situation": C.SITUATION},
-        "contacts": C.CONTACTS,
-        "axes": C.AXES,
-        "offices": C.OFFICES,
-        "office_types": C.OFFICE_TYPES,
+        "config": public_cfg,
+        **_tr({
+            "questionnaire": {"intro": C.QUESTIONNAIRE_INTRO, "sections": C.QUESTIONNAIRE,
+                              "situation": C.SITUATION},
+            "contacts": C.CONTACTS,
+            "axes": C.AXES,
+            "offices": C.OFFICES,
+            "office_types": C.OFFICE_TYPES,
+            "evidence_categories": C.EVIDENCE_CATEGORIES,
+            "features": L.FEATURES,
+            "assistant": C.ASSISTANT,
+            "resources": C.RESOURCES,
+            "last_result": L.last_result(),
+            "audit": L.get_audit_state(),
+            "dossier": L.dossier_status(),
+        }),
         "vaud_url": C.VAUD_URL,
-        "evidence_categories": C.EVIDENCE_CATEGORIES,
-        "features": L.FEATURES,
-        "assistant": C.ASSISTANT,
-        "resources": C.RESOURCES,
         "front": L.get_front(),
         "prefs": L.get_prefs(),
         "prefs_at": L.get_pref_times(),
-        "last_result": L.last_result(),
-        "audit": L.get_audit_state(),
         "evidence": L.list_evidence(),
         "journal": L.list_journal(),
-        "dossier": L.dossier_status(),
     })
 
 
@@ -264,7 +318,8 @@ def app_front():
     """Choisit l'apparence de l'app : recettes ou Wikipédia (+ mot secret)."""
     data = request.get_json(silent=True) or {}
     try:
-        return jsonify({"front": L.set_front(data.get("front", ""), data.get("phrase"))})
+        return jsonify({"front": L.set_front(data.get("front", ""), data.get("phrase"),
+                                             activate=data.get("activate", True) is not False)})
     except ValueError as e:
         abort(400, str(e))
 
@@ -277,7 +332,7 @@ def assistant():
     """Réponse de l'assistant. Aperçu : texte fixe (voir logic.assistant_reply)."""
     data = request.get_json(silent=True) or {}
     try:
-        return jsonify(L.assistant_reply(data.get("messages")))
+        return jsonify(_tr(L.assistant_reply(data.get("messages"))))
     except ValueError as e:
         abort(400, str(e))
 
@@ -289,7 +344,7 @@ def assistant():
 def questionnaire_evaluate():
     data = request.get_json(silent=True) or {}
     result = L.evaluate(data.get("answers", {}), data.get("situation", {}))
-    return jsonify(result)
+    return jsonify(_tr(result))
 
 
 # --- Localisation ----------------------------------------------------------
@@ -297,7 +352,7 @@ def questionnaire_evaluate():
 @app.get("/api/location/audit")
 @protected
 def location_audit():
-    return jsonify(L.get_audit_state())
+    return jsonify(_tr(L.get_audit_state()))
 
 
 @app.post("/api/location/audit/<item_id>")
@@ -305,7 +360,7 @@ def location_audit():
 def location_audit_set(item_id):
     data = request.get_json(silent=True) or {}
     try:
-        return jsonify(L.set_audit_item(item_id, data.get("done", True)))
+        return jsonify(_tr(L.set_audit_item(item_id, data.get("done", True))))
     except ValueError as e:
         abort(400, str(e))
 
@@ -313,7 +368,7 @@ def location_audit_set(item_id):
 @app.post("/api/location/scan")
 @protected
 def location_scan():
-    return jsonify(L.scan_findings())
+    return jsonify(_tr(L.scan_findings()))
 
 
 # --- Coffre à preuves ------------------------------------------------------
@@ -322,7 +377,7 @@ def location_scan():
 @protected
 def evidence_list():
     return jsonify({"evidence": L.list_evidence(), "journal": L.list_journal(),
-                    "dossier": L.dossier_status()})
+                    "dossier": _tr(L.dossier_status())})
 
 
 @app.post("/api/evidence")
@@ -335,7 +390,7 @@ def evidence_add():
         item = L.add_evidence(f, request.form.get("category", "autre"), request.form.get("note", ""))
     except ValueError as e:
         abort(400, str(e))
-    return jsonify({"item": item, "dossier": L.dossier_status()})
+    return jsonify({"item": item, "dossier": _tr(L.dossier_status())})
 
 
 @app.get("/api/evidence/file/<item_id>")
@@ -352,13 +407,13 @@ def evidence_file(item_id):
 def evidence_delete(item_id):
     if not L.delete_evidence(item_id):
         abort(404)
-    return jsonify({"ok": True, "dossier": L.dossier_status()})
+    return jsonify({"ok": True, "dossier": _tr(L.dossier_status())})
 
 
 @app.get("/api/evidence/export")
 @protected
 def evidence_export():
-    data, name = L.export_zip()
+    data, name = L.export_zip(L.get_lang())
     return send_file(io.BytesIO(data), mimetype="application/zip", as_attachment=True,
                      download_name=name)
 
@@ -371,7 +426,7 @@ def journal_add():
         entry = L.add_journal(data.get("text", ""), data.get("occurred"))
     except ValueError as e:
         abort(400, str(e))
-    return jsonify({"entry": entry, "dossier": L.dossier_status()})
+    return jsonify({"entry": entry, "dossier": _tr(L.dossier_status())})
 
 
 @app.delete("/api/journal/<entry_id>")
@@ -379,7 +434,7 @@ def journal_add():
 def journal_delete(entry_id):
     if not L.delete_journal(entry_id):
         abort(404)
-    return jsonify({"ok": True, "dossier": L.dossier_status()})
+    return jsonify({"ok": True, "dossier": _tr(L.dossier_status())})
 
 
 # --- Réglages (démo) -------------------------------------------------------

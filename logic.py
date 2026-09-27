@@ -28,6 +28,7 @@ from pathlib import Path
 from werkzeug.utils import secure_filename
 
 import content as C
+import i18n as I
 
 BASE_DIR = Path(__file__).resolve().parent
 STORAGE_DIR = BASE_DIR / "storage"
@@ -38,6 +39,8 @@ JOURNAL_FILE = STORAGE_DIR / "journal.json"
 AUDIT_FILE = STORAGE_DIR / "location_audit.json"
 RESULT_FILE = STORAGE_DIR / "last_result.json"
 PREFS_FILE = STORAGE_DIR / "prefs.json"
+LANG_FILE = STORAGE_DIR / "lang.json"     # gardé par « Réinitialiser la démo »
+FAVS_FILE = STORAGE_DIR / "favoris.json"   # favoris de l'app de cuisine (publics, comme dans toute app)
 
 PERSONS_MIN, PERSONS_MAX = 1, 12
 
@@ -64,11 +67,28 @@ def now_iso() -> str:
     return datetime.now().replace(microsecond=0).isoformat()
 
 
-def fmt_dt(iso: str) -> str:
+def fmt_dt(iso: str, lang: str = I.DEFAULT) -> str:
     try:
-        return datetime.fromisoformat(iso).strftime("%d.%m.%Y à %H:%M")
+        d = datetime.fromisoformat(iso)
     except ValueError:
         return iso
+    return I.tr("{date} à {time}", lang).format(date=f"{d:%d.%m.%Y}", time=f"{d:%H:%M}")
+
+
+# ---------------------------------------------------------------------------
+# Langue de l'application (profil des recettes, accueil ou Réglages d'Abri)
+# ---------------------------------------------------------------------------
+
+def get_lang() -> str:
+    lang = _read_json(LANG_FILE, {}).get("lang", I.DEFAULT)
+    return lang if I.valid(lang) else I.DEFAULT
+
+
+def set_lang(lang: str) -> str:
+    if not I.valid(lang):
+        raise ValueError("Langue inconnue")
+    _write_json(LANG_FILE, {"lang": lang})
+    return lang
 
 
 # ---------------------------------------------------------------------------
@@ -96,8 +116,9 @@ def set_config(recipe_id: str, persons: int) -> dict:
         raise ValueError(f"Le nombre de personnes doit être entre {PERSONS_MIN} et {PERSONS_MAX}")
     cfg = {"recipe_id": recipe_id, "persons": persons, "created": now_iso()}
     old = get_config() or {}
-    if old.get("wiki_phrase"):          # changer la recette ne doit pas effacer le mot secret
-        cfg["wiki_phrase"] = old["wiki_phrase"]
+    for key in ("wiki_phrase", "wiki_word"):   # changer la recette ne doit pas effacer le mot secret
+        if old.get(key):
+            cfg[key] = old[key]
     _write_json(CONFIG_FILE, cfg)
     return cfg
 
@@ -136,7 +157,8 @@ FEATURES = {
     },
     "face_id": {
         "label": "Ouverture rapide (Face ID)",
-        "desc": "Depuis l'app de cuisine, gardez le doigt appuyé sur « Bonjour » : Face ID ouvre Abri sans passer par la recette.",
+        "desc": "Gardez le doigt appuyé sur une recette de vos favoris (ou sur le titre de l'accueil de "
+                "Wikipédia) : Face ID ouvre Abri sans passer par le code secret.",
         # 'demo' = animation Face ID simulée ; une vraie app utiliserait la biométrie du téléphone.
         "status": "demo",
         "default": False,
@@ -174,8 +196,8 @@ def set_pref(key: str, value: bool) -> dict:
 
 
 def quick_unlock_enabled() -> bool:
-    """Vrai si l'ouverture rapide « Face ID » est activée (apparence recettes seulement)."""
-    return is_configured() and get_front() == "recettes" and get_prefs().get("face_id", False)
+    """Vrai si l'ouverture rapide « Face ID » est activée (recettes : favoris ; Wikipédia : accueil)."""
+    return is_configured() and get_prefs().get("face_id", False)
 
 
 # ---------------------------------------------------------------------------
@@ -184,9 +206,10 @@ def quick_unlock_enabled() -> bool:
 # Chaque apparence a son propre secret, et seul celui de l'apparence active ouvre Abri :
 #   • recettes : la bonne recette + le bon nombre de personnes (« Adapter les quantités ») ;
 #   • wiki     : un mot secret tapé dans la recherche (validé avec Entrée).
-# Le mot secret n'est gardé que sous forme d'empreinte (config.json → wiki_phrase) : il
-# n'apparaît pas en clair si quelqu'un ouvre le fichier. Une empreinte d'un mot court se
-# retrouve toutefois par essais : c'est un camouflage, pas un coffre-fort.
+# Le déverrouillage compare une empreinte (config.json → wiki_phrase). Le mot lui-même est
+# aussi gardé (wiki_word) pour être rappelé dans les Réglages d'Abri, comme la recette secrète :
+# config.json n'est lisible que depuis l'ordinateur qui héberge l'app, jamais par l'interface
+# publique. C'est un camouflage, pas un coffre-fort.
 FRONTS = ("recettes", "wiki")
 WIKI_PHRASE_MIN = 4
 
@@ -210,7 +233,8 @@ def _hash_phrase(text) -> str:
     return hashlib.sha256(f"abri-wiki|{_norm_phrase(text)}".encode()).hexdigest()
 
 
-def set_front(front: str, phrase: str | None = None) -> str:
+def set_front(front: str, phrase: str | None = None, activate: bool = True) -> str:
+    """activate=False : enregistre seulement le mot secret, sans changer d'apparence."""
     if front not in FRONTS:
         raise ValueError("Apparence inconnue")
     cfg = get_config()
@@ -221,9 +245,12 @@ def set_front(front: str, phrase: str | None = None) -> str:
             if len(_norm_phrase(phrase).replace(" ", "")) < WIKI_PHRASE_MIN:
                 raise ValueError(f"Le mot secret doit avoir au moins {WIKI_PHRASE_MIN} lettres ou chiffres")
             cfg["wiki_phrase"] = _hash_phrase(phrase)
+            cfg["wiki_word"] = " ".join(str(phrase).split())
             _write_json(CONFIG_FILE, cfg)
         elif not cfg.get("wiki_phrase"):
             raise ValueError("Choisissez d'abord un mot secret")
+    if not activate:
+        return get_front()
     saved = _read_json(PREFS_FILE, {})
     saved["front"] = front
     _write_json(PREFS_FILE, saved)
@@ -260,6 +287,18 @@ def assistant_reply(messages: list) -> dict:
         raise ValueError("Message trop long")
     return {"text": C.ASSISTANT["placeholder_reply"], "actions": C.ASSISTANT["placeholder_actions"],
             "status": "placeholder"}
+
+
+def get_favs() -> list[str]:
+    return [f for f in _read_json(FAVS_FILE, []) if isinstance(f, str)]
+
+
+def set_favs(favs) -> list[str]:
+    """Favoris de « Petits Plats » : recettes fixes ou du jour, sans doublon."""
+    known = {r["id"] for r in C.RECIPES_FIXED + C.RECIPES_DAILY_POOL}
+    clean = list(dict.fromkeys(f for f in (favs or []) if isinstance(f, str) and f in known))
+    _write_json(FAVS_FILE, clean)
+    return clean
 
 
 def check_unlock(recipe_id: str, persons) -> bool:
@@ -420,6 +459,17 @@ ACTIONS = {
 }
 
 
+# Conseils ajoutés au résultat selon les réponses.
+ADVICE = {
+    "sexuelle": "Si les faits sont récents, essayez si possible de ne pas vous laver ni changer de vêtements "
+                "avant l'examen médical : cela préserve les traces.",
+    "enfants": "Les enfants exposés à la violence sont aussi des victimes : les Offices de protection des "
+               "mineurs peuvent les protéger et vous conseiller.",
+    "migration": "Se séparer d'un·e conjoint·e violent·e ne fait pas automatiquement perdre le permis de séjour : "
+                 "La Fraternité du CSP vous renseigne.",
+}
+
+
 def _section_of(qid: str) -> dict | None:
     for section in C.QUESTIONNAIRE:
         if any(q["id"] == qid for q in section["questions"]):
@@ -477,14 +527,11 @@ def evaluate(answers: dict, situation: dict | None = None) -> dict:
 
     advice = []
     if "sexuelle" in flagged:
-        advice.append("Si les faits sont récents, essayez si possible de ne pas vous laver ni changer de vêtements "
-                      "avant l'examen médical : cela préserve les traces.")
+        advice.append(ADVICE["sexuelle"])
     if situation.get("enfants"):
-        advice.append("Les enfants exposés à la violence sont aussi des victimes : les Offices de protection des "
-                      "mineurs peuvent les protéger et vous conseiller.")
+        advice.append(ADVICE["enfants"])
     if situation.get("migration"):
-        advice.append("Se séparer d'un·e conjoint·e violent·e ne fait pas automatiquement perdre le permis de séjour : "
-                      "La Fraternité du CSP vous renseigne.")
+        advice.append(ADVICE["migration"])
 
     sections = [
         {"id": s["id"], "title": s["title"], "icon": s["icon"], "mention": s["mention"],
@@ -671,15 +718,17 @@ def dossier_status() -> dict:
     return {"items": status, "n_done": n_done, "n_total": len(status)}
 
 
-def export_zip() -> tuple[bytes, str]:
+def export_zip(lang: str = I.DEFAULT) -> tuple[bytes, str]:
     """Construit un ZIP : pièces renommées + index + journal. Retourne (bytes, nom)."""
-    cats = {c["id"]: c["label"] for c in C.EVIDENCE_CATEGORIES}
+    t = lambda text: I.tr(text, lang)  # noqa: E731
+    dt = lambda iso: fmt_dt(iso, lang)  # noqa: E731
+    cats = {c["id"]: t(c["label"]) for c in C.EVIDENCE_CATEGORIES}
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        lines = ["DOSSIER — pièces déposées dans le coffre d'Abri",
-                 f"Exporté le {fmt_dt(now_iso())}", "",
-                 "Chaque fichier est accompagné de son empreinte SHA-256 : elle permet de prouver",
-                 "qu'il n'a pas été modifié depuis son dépôt.", ""]
+        lines = [t("DOSSIER — pièces déposées dans le coffre d'Abri"),
+                 t("Exporté le {date}").format(date=dt(now_iso())), "",
+                 t("Chaque fichier est accompagné de son empreinte SHA-256 : elle permet de prouver"),
+                 t("qu'il n'a pas été modifié depuis son dépôt."), ""]
         for n, item in enumerate(reversed(list_evidence()), start=1):
             path = evidence_path(item)
             if not path.exists():
@@ -688,16 +737,17 @@ def export_zip() -> tuple[bytes, str]:
             arc = f"pieces/{n:03d}_{item['category']}_{item['added_at'][:10]}{ext}"
             zf.write(path, arc)
             lines += [f"[{n:03d}] {cats.get(item['category'], item['category'])}",
-                      f"      fichier   : {arc}",
-                      f"      nom       : {item['name']}",
-                      f"      déposé le : {fmt_dt(item['added_at'])}",
-                      f"      SHA-256   : {item['sha256']}",
-                      f"      note      : {item['note'] or '—'}", ""]
+                      f"      {t('fichier')} : {arc}",
+                      f"      {t('nom')} : {item['name']}",
+                      f"      {t('déposé le')} : {dt(item['added_at'])}",
+                      f"      SHA-256 : {item['sha256']}",
+                      f"      {t('note')} : {item['note'] or '—'}", ""]
         zf.writestr("INDEX.txt", "\n".join(lines))
 
-        jl = ["JOURNAL DES FAITS (chronologie)", ""]
+        jl = [t("JOURNAL DES FAITS (chronologie)"), ""]
         for e in reversed(list_journal()):
-            jl += [f"Faits du {fmt_dt(e['occurred'])}  (noté le {fmt_dt(e['recorded'])})",
+            jl += [t("Faits du {occurred}  (noté le {recorded})").format(occurred=dt(e["occurred"]),
+                                                                        recorded=dt(e["recorded"])),
                    f"  {e['text']}", ""]
         zf.writestr("JOURNAL.txt", "\n".join(jl))
     return buf.getvalue(), f"dossier_{datetime.now():%Y%m%d_%H%M}.zip"
@@ -708,7 +758,7 @@ def export_zip() -> tuple[bytes, str]:
 # ---------------------------------------------------------------------------
 
 def reset_all() -> None:
-    for f in (CONFIG_FILE, EVIDENCE_INDEX, JOURNAL_FILE, AUDIT_FILE, RESULT_FILE, PREFS_FILE):
+    for f in (CONFIG_FILE, EVIDENCE_INDEX, JOURNAL_FILE, AUDIT_FILE, RESULT_FILE, PREFS_FILE, FAVS_FILE):
         if f.exists():
             f.unlink()
     if EVIDENCE_DIR.exists():
