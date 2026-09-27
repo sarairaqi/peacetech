@@ -1,7 +1,7 @@
 """
 logic.py — La logique du prototype Abri (sans Flask, testable seule).
 
-  • Storage      : lecture/écriture des fichiers JSON dans storage/
+  • Storage      : fichiers JSON par appareil, dans storage/devices/<id>/
   • Auth         : vérification « bonne recette + bon nombre de personnes »
   • Recettes     : recettes du jour, adaptation des quantités
   • Questionnaire: calcul du niveau de danger + redirections + pièces du dossier
@@ -21,7 +21,9 @@ import re
 import secrets
 import unicodedata
 import uuid
+import shutil
 import zipfile
+from contextvars import ContextVar
 from datetime import date, datetime
 from pathlib import Path
 
@@ -32,24 +34,63 @@ import i18n as I
 
 BASE_DIR = Path(__file__).resolve().parent
 STORAGE_DIR = BASE_DIR / "storage"
-EVIDENCE_DIR = STORAGE_DIR / "evidence"
-CONFIG_FILE = STORAGE_DIR / "config.json"
-EVIDENCE_INDEX = STORAGE_DIR / "evidence.json"
-JOURNAL_FILE = STORAGE_DIR / "journal.json"
-AUDIT_FILE = STORAGE_DIR / "location_audit.json"
-RESULT_FILE = STORAGE_DIR / "last_result.json"
-PREFS_FILE = STORAGE_DIR / "prefs.json"
-LANG_FILE = STORAGE_DIR / "lang.json"     # gardé par « Réinitialiser la démo »
-FAVS_FILE = STORAGE_DIR / "favoris.json"   # favoris de l'app de cuisine (publics, comme dans toute app)
+DEVICES_DIR = STORAGE_DIR / "devices"     # un dossier par appareil : storage/devices/<id>/
+
+# Fichiers d'un appareil (relatifs à son dossier)
+EVIDENCE_DIR = "evidence"
+CONFIG_FILE = "config.json"
+EVIDENCE_INDEX = "evidence.json"
+JOURNAL_FILE = "journal.json"
+AUDIT_FILE = "location_audit.json"
+RESULT_FILE = "last_result.json"
+PREFS_FILE = "prefs.json"
+LANG_FILE = "lang.json"         # gardé par « Réinitialiser la démo »
+FAVS_FILE = "favoris.json"      # favoris de l'app de cuisine (publics, comme dans toute app)
 
 PERSONS_MIN, PERSONS_MAX = 1, 12
+
+
+# ---------------------------------------------------------------------------
+# Appareil : chaque navigateur a ses propres données (recette secrète, coffre, réglages…).
+# app.py lit l'identifiant dans un cookie et le fixe au début de chaque requête.
+# ---------------------------------------------------------------------------
+
+_device: ContextVar[str | None] = ContextVar("device", default=None)
+
+
+def new_device_id() -> str:
+    return secrets.token_hex(16)
+
+
+def valid_device_id(value) -> bool:
+    # 32 caractères hexadécimaux seulement : l'identifiant sert de nom de dossier
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{32}", value) is not None
+
+
+def use_device(device_id: str) -> None:
+    if not valid_device_id(device_id):
+        raise RuntimeError("identifiant d'appareil invalide")   # app.py remplace les cookies invalides avant
+    _device.set(device_id)
+
+
+def device_dir() -> Path:
+    device_id = _device.get()
+    if device_id is None:
+        # Jamais de repli sur un dossier commun : les données d'un appareil restent à lui
+        raise RuntimeError("aucun appareil défini pour cette requête")
+    return DEVICES_DIR / device_id
+
+
+def _path(name: str) -> Path:
+    return device_dir() / name
 
 
 # ---------------------------------------------------------------------------
 # Storage (petits fichiers JSON — largement suffisant pour un prototype)
 # ---------------------------------------------------------------------------
 
-def _read_json(path: Path, default):
+def _read_json(name: str, default):
+    path = _path(name)
     if not path.exists():
         return default
     try:
@@ -58,7 +99,8 @@ def _read_json(path: Path, default):
         return default
 
 
-def _write_json(path: Path, data) -> None:
+def _write_json(name: str, data) -> None:
+    path = _path(name)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -626,8 +668,9 @@ def add_evidence(file_storage, category: str, note: str) -> dict:
     original = secure_filename(file_storage.filename or "preuve") or "preuve"
     item_id = uuid.uuid4().hex[:12]
     stored_name = f"{item_id}_{original}"
-    EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
-    (EVIDENCE_DIR / stored_name).write_bytes(data)
+    folder = _path(EVIDENCE_DIR)
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / stored_name).write_bytes(data)
     mime = file_storage.mimetype or mimetypes.guess_type(original)[0] or "application/octet-stream"
     item = {
         "id": item_id,
@@ -655,7 +698,7 @@ def get_evidence(item_id: str) -> dict | None:
 
 
 def evidence_path(item: dict) -> Path:
-    return EVIDENCE_DIR / item["stored"]
+    return _path(EVIDENCE_DIR) / item["stored"]
 
 
 def delete_evidence(item_id: str) -> bool:
@@ -758,10 +801,14 @@ def export_zip(lang: str = I.DEFAULT) -> tuple[bytes, str]:
 # ---------------------------------------------------------------------------
 
 def reset_all() -> None:
-    for f in (CONFIG_FILE, EVIDENCE_INDEX, JOURNAL_FILE, AUDIT_FILE, RESULT_FILE, PREFS_FILE, FAVS_FILE):
+    """Réinitialise l'appareil de la requête (la langue est gardée)."""
+    for name in (CONFIG_FILE, EVIDENCE_INDEX, JOURNAL_FILE, AUDIT_FILE, RESULT_FILE, PREFS_FILE, FAVS_FILE):
+        f = _path(name)
         if f.exists():
             f.unlink()
-    if EVIDENCE_DIR.exists():
-        for p in EVIDENCE_DIR.iterdir():
-            if p.is_file():
-                p.unlink()
+    shutil.rmtree(_path(EVIDENCE_DIR), ignore_errors=True)
+
+
+def reset_all_devices() -> None:
+    """python app.py --reset : efface les données de tous les appareils."""
+    shutil.rmtree(DEVICES_DIR, ignore_errors=True)

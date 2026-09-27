@@ -398,7 +398,6 @@ function renderSetup() {
       <p class="lead">${t('Choisissez une recette que vous n\'ouvrirez pas par hasard devant quelqu\'un.')}</p>
       <div class="pick-grid">${S.recipes.map((r) => `<button class="pick ${st.recipe === r.id ? 'on' : ''}" data-action="setup-pick" data-id="${r.id}"><div class="em">${r.emoji}</div><div class="nm">${esc(r.name)}</div></button>`).join('')}</div>
       <div class="grow"></div>
-      <button class="btn primary block" data-action="setup-next" ${st.recipe ? '' : 'disabled'}>${t('Suivant')}</button>
       ${dots}</div>`;
   }
   if (st.step === 2) {
@@ -1158,7 +1157,7 @@ function appEvidence() {
         <p class="ev-note">${LI.info}<span>${t('Le fichier est enregistré dans les téléchargements du téléphone. Supprimez-le après l\'avoir remis.')}</span></p></div>`;
   }
   return `<div class="fade-in ev"><div class="page-title">${t('Mon coffre')}</div><p class="page-sub">${t('Vos preuves, datées et rangées. Visibles seulement ici.')}</p>
-    <div class="cloud-card">${LI.cloud}<div><b>${t('Sauvegardé dans votre cloud privé')}</b><span>${t('Preuves et journal sont gardés hors du téléphone. S\'il est cassé, perdu ou confisqué, vous retrouvez tout depuis un autre appareil avec votre accès discret.')}</span></div></div>
+    <div class="cloud-card">${LI.cloud}<div><b>${t('Sauvegardé dans votre cloud privé')}</b><span>${t('Preuves et journal sont gardés dans votre cloud privé, liés à ce téléphone. Pour ne rien perdre s\'il est cassé ou confisqué, exportez le dossier (.zip) et confiez-le à une personne de confiance ou au Centre LAVI.')}</span></div></div>
     <div class="segmented ev-tabs">${seg('pieces', 'image', t('Preuves'), B.evidence.length)}${seg('journal', 'pen', t('Journal'), B.journal.length)}${seg('dossier', 'list', t('Dossier'), `${B.dossier.n_done}/${B.dossier.n_total}`)}</div>${body}</div>`;
 }
 
@@ -1387,7 +1386,7 @@ function drawOverlay() {
       <ul class="scan-steps">${steps.map((s, n) => `<li class="${n < O.n ? 'done' : ''}">${n < O.n ? '✓' : n === O.n ? '<span class="spinner"></span>' : '·'} ${s}</li>`).join('')}</ul>`;
     else body = `<div class="row between"><h3 style="margin:0">${t('C\'est fait')}</h3><span class="tiny muted">${t('démo · simulée')}</span></div>
       <ul class="dp-done">${departResults().map((s) => `<li>${LI.check}<span>${s}</span></li>`).join('')}</ul>
-      <div class="cloud-card">${LI.cloud}<div><b>${t('Vos preuves sont en sécurité')}</b><span>${t('Preuves et journal restent sauvegardés dans votre cloud privé, même si ce téléphone est cassé ou repris.')}</span></div></div>
+      <div class="cloud-card">${LI.cloud}<div><b>${t('Vos preuves sont en sécurité')}</b><span>${t('Preuves et journal restent dans votre cloud privé. Exportez le dossier (.zip) depuis le Coffre pour en garder une copie en lieu sûr.')}</span></div></div>
       <div class="advice">${LI.info}<span>${t('Depuis un autre appareil, changez aussi vos mots de passe (e-mail, compte Apple ou Google).')}<br><button class="btn soft sm" data-action="call" data-id="victimes142">${LI.phone} ${t('Appeler le 142')}</button></span></div>
       <button class="btn primary block" data-action="overlay-close">${t('Terminé')}</button>`;
     overlaysEl.innerHTML = `<div class="overlay dim" ${O.step === 'run' ? '' : 'data-action="overlay-close"'}><div class="sheet depart-sheet" data-stop><div class="grip"></div>${body}</div></div>`;
@@ -1516,7 +1515,12 @@ const actions = {
   'setup-next': () => { S.setup.step++; render(); },
   'setup-prev': () => { S.setup.step--; render(); },
   'setup-cancel': () => { S.setup.fromSettings = false; S.setup.step = 0; S.mode = 'app'; render(); },
-  'setup-pick': (d) => { S.setup.recipe = d.id; render(); },
+  // Toucher une recette la choisit et passe directement à l'étape suivante (pas de « Suivant »)
+  'setup-pick': (d) => {
+    const st = S.setup; if (st.picking) return;
+    st.recipe = d.id; st.picking = true; render();              // la recette choisie s'allume un instant
+    setTimeout(() => { st.picking = false; if (S.mode === 'setup' && st.step === 1) { st.step++; render(); } }, 220);
+  },
   'setup-inc': () => { S.setup.persons = Math.min(S.personsMax, S.setup.persons + 1); render(); },
   'setup-dec': () => { S.setup.persons = Math.max(S.personsMin, S.setup.persons - 1); render(); },
   'setup-finish': setupFinish,

@@ -18,6 +18,10 @@
   const phone = document.getElementById("phone");
   if (!phone) return;
 
+  // Sur un téléphone ou une tablette (écran tactile, ou app en plein écran) : pas de démo du tout.
+  const MOBILE = "(max-width: 520px), (max-height: 700px)";
+  if (matchMedia(MOBILE).matches || matchMedia("(hover: none) and (pointer: coarse)").matches) return;
+
   const el = (tag, cls, text) => {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
@@ -57,7 +61,8 @@
   btn.type = "button";
   const label = el("span", null);
   btn.append(el("span", "dot"), label);
-  document.body.appendChild(btn);
+  // Dans la page, au-dessus du téléphone : flottant en haut à gauche sur grand écran (CSS)
+  row.parentNode.insertBefore(btn, row);
 
   let timer = null;
   let startedAt = 0;
@@ -81,5 +86,7 @@
   };
 
   btn.addEventListener("click", () => render(!btn.classList.contains("on")));
+  // Fenêtre réduite à la taille d'un téléphone : la démo est masquée, l'enregistrement s'arrête
+  matchMedia(MOBILE).addEventListener("change", (e) => { if (e.matches) render(false); });
   render(false);
 })();

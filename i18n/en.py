@@ -350,7 +350,6 @@ UI = {
     "{n} articles retirés": "{n} items removed",
     "Je suis partie · dernier recours": "I've left · last resort",
     "Sauvegardé dans votre cloud privé": "Backed up to your private cloud",
-    "Preuves et journal sont gardés hors du téléphone. S'il est cassé, perdu ou confisqué, vous retrouvez tout depuis un autre appareil avec votre accès discret.": "Evidence and journal are kept off the phone. If it is broken, lost or confiscated, you get everything back from another device with your discreet access.",
     "Tous": "All",
     "Entrées": "Starters",
     "Plats": "Mains",
@@ -379,7 +378,6 @@ UI = {
     "Maintenir pour tout couper": "Hold to cut everything off",
     "Protection en cours…": "Protecting you…",
     "Vos preuves sont en sécurité": "Your evidence is safe",
-    "Preuves et journal restent sauvegardés dans votre cloud privé, même si ce téléphone est cassé ou repris.": "Evidence and journal stay backed up in your private cloud, even if this phone is broken or taken back.",
     "Depuis un autre appareil, changez aussi vos mots de passe (e-mail, compte Apple ou Google).": "From another device, also change your passwords (email, Apple or Google account).",
     "Terminé": "Done",
     "Recherche des applis de surveillance…": "Looking for surveillance apps…",
@@ -391,6 +389,9 @@ UI = {
     "Recopie de l'écran vers un autre appareil arrêtée": "Screen mirroring to another device stopped",
     "Partage de position avec 1 personne arrêté": "Location sharing with 1 person stopped",
     "2 appareils inconnus déconnectés de votre compte": "2 unknown devices signed out of your account",
+    # Cloud privé lié à l'appareil (pas de récupération depuis un autre appareil)
+    "Preuves et journal sont gardés dans votre cloud privé, liés à ce téléphone. Pour ne rien perdre s'il est cassé ou confisqué, exportez le dossier (.zip) et confiez-le à une personne de confiance ou au Centre LAVI.": "Evidence and journal are kept in your private cloud, linked to this phone. So you lose nothing if it is broken or confiscated, export the file (.zip) and give it to someone you trust or to the LAVI Centre.",
+    "Preuves et journal restent dans votre cloud privé. Exportez le dossier (.zip) depuis le Coffre pour en garder une copie en lieu sûr.": "Evidence and journal stay in your private cloud. Export the file (.zip) from the Vault to keep a copy somewhere safe.",
 }
 
 # ---------------------------------------------------------------------------

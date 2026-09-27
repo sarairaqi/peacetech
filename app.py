@@ -3,7 +3,9 @@ app.py — Serveur du prototype Abri / Petits Plats (Flask).
 
 Lancer :   python app.py            → http://127.0.0.1:5000
            python app.py --host 0.0.0.0   (pour ouvrir depuis un téléphone sur le même Wi-Fi)
-           python app.py --reset    (efface la configuration et les preuves : démo « premier lancement »)
+           python app.py --reset    (efface configuration et preuves de tous les appareils : démo « premier lancement »)
+
+Chaque appareil (navigateur) a ses propres données, repérées par un cookie : voir _use_device.
 
 L'application de couverture (« Petits Plats », recettes) est publique.
 L'espace protégé (« Abri ») n'est servi qu'avec un jeton obtenu en choisissant la
@@ -18,7 +20,7 @@ import json
 import io
 from functools import wraps
 
-from flask import Flask, abort, jsonify, render_template, request, send_file
+from flask import Flask, abort, g, jsonify, render_template, request, send_file
 
 import content as C
 import i18n as I
@@ -28,12 +30,14 @@ import wikimirror as W
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 Mo par fichier
 
-# Jetons de session valides. Gardés dans storage/sessions.json : en mode debug, Flask redémarre
+# Jetons de session valides. Gardés dans storage/devices/<id>/sessions.json : en mode debug, Flask redémarre
 # à chaque modification d'un fichier .py, et un jeton perdu verrouillait Abri en pleine
 # utilisation (« verrouillé » au milieu d'un réglage). Le fichier est ignoré par git.
 class _Sessions:
-    def __init__(self):
-        self._path = L.STORAGE_DIR / "sessions.json"
+    # Un fichier par appareil : un jeton ouvert sur un téléphone ne vaut rien sur un autre
+    @property
+    def _path(self):
+        return L.device_dir() / "sessions.json"
 
     def _load(self) -> set:
         try:
@@ -59,6 +63,32 @@ class _Sessions:
 
 
 _sessions = _Sessions()
+
+# Appareil : un identifiant aléatoire dans un cookie. Chaque navigateur a sa propre recette
+# secrète, son coffre et ses réglages (storage/devices/<id>/). Le nom du cookie est celui
+# d'une app de cuisine ordinaire : rien ne révèle Abri en regardant les cookies du téléphone.
+DEVICE_COOKIE = "pp_device"
+DEVICE_COOKIE_AGE = 2 * 365 * 24 * 3600   # 2 ans : effacer le cookie = repartir de zéro
+
+
+@app.before_request
+def _use_device():
+    if request.endpoint == "static":
+        return
+    device_id = request.cookies.get(DEVICE_COOKIE)
+    if not L.valid_device_id(device_id):
+        device_id = L.new_device_id()
+        g.new_device = device_id
+    L.use_device(device_id)
+
+
+@app.after_request
+def _device_cookie(resp):
+    device_id = g.pop("new_device", None)
+    if device_id:
+        resp.set_cookie(DEVICE_COOKIE, device_id, max_age=DEVICE_COOKIE_AGE,
+                        httponly=True, samesite="Lax", secure=request.is_secure)
+    return resp
 
 
 def _token_from_request() -> str | None:
@@ -483,10 +513,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Prototype Abri / Petits Plats")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5000)
-    parser.add_argument("--reset", action="store_true", help="efface configuration et preuves")
+    parser.add_argument("--reset", action="store_true", help="efface configuration et preuves de tous les appareils")
     args = parser.parse_args()
     if args.reset:
-        L.reset_all()
-        print("Configuration et preuves effacées.")
+        L.reset_all_devices()
+        print("Configuration et preuves effacées (tous les appareils).")
     print(f"\n  Petits Plats / Abri  →  http://{'127.0.0.1' if args.host == '0.0.0.0' else args.host}:{args.port}\n")
     app.run(host=args.host, port=args.port, debug=True)

@@ -1219,3 +1219,15 @@ body:has(.phone.on-wiki) .stage-hint { color: #54595d; font-weight: 400; }
 
 /* Feuille redessinée sur place (réglage modifié) : pas de nouvelle animation d'entrée */
 .overlay.still, .overlay.still .sheet, .overlay.still .confirm-box { animation: none; }
+
+/* Sur un téléphone : l'app seule, comme une vraie application. Pas de nappe ni de décor :
+   le fond de page (visible au rebond du défilement, derrière les barres du navigateur ou le
+   clavier) prend la couleur de l'écran affiché. Placé en fin de fichier pour passer après
+   les fonds « bureau » ci-dessus. */
+@media (max-width: 520px), (max-height: 700px) {
+  html, body, body:has(.phone:not(.on-abri)) { background: var(--c-bg); }
+  html:has(.phone.cover-dark), body:has(.phone.cover-dark) { background: #1b1411; }
+  html:has(.phone.on-wiki), body:has(.phone.on-wiki) { background: #fff; }
+  html:has(.phone.on-abri), body:has(.phone.on-abri) { background: var(--a-bg); }
+  .phone, .phone:not(.on-abri), .phone.on-wiki { background: transparent; box-shadow: none; }
+}

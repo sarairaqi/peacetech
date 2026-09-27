@@ -350,7 +350,6 @@ UI = {
     "{n} articles retirés": "{n} artikuj u hoqën",
     "Je suis partie · dernier recours": "Jam larguar · mjeti i fundit",
     "Sauvegardé dans votre cloud privé": "Ruajtur në cloud-in tuaj privat",
-    "Preuves et journal sont gardés hors du téléphone. S'il est cassé, perdu ou confisqué, vous retrouvez tout depuis un autre appareil avec votre accès discret.": "Provat dhe ditari ruhen jashtë telefonit. Nëse prishet, humbet ose konfiskohet, i rigjeni të gjitha nga një pajisje tjetër me hyrjen tuaj të fshehtë.",
     "Tous": "Të gjitha",
     "Entrées": "Antipasta",
     "Plats": "Pjata kryesore",
@@ -379,7 +378,6 @@ UI = {
     "Maintenir pour tout couper": "Mbajeni për të ndërprerë gjithçka",
     "Protection en cours…": "Duke ju mbrojtur…",
     "Vos preuves sont en sécurité": "Provat tuaja janë të sigurta",
-    "Preuves et journal restent sauvegardés dans votre cloud privé, même si ce téléphone est cassé ou repris.": "Provat dhe ditari mbeten të ruajtura në cloud-in tuaj privat, edhe nëse ky telefon prishet ose ju merret.",
     "Depuis un autre appareil, changez aussi vos mots de passe (e-mail, compte Apple ou Google).": "Nga një pajisje tjetër, ndryshoni edhe fjalëkalimet (e-mail, llogaria Apple ose Google).",
     "Terminé": "U krye",
     "Recherche des applis de surveillance…": "Duke kërkuar aplikacione mbikëqyrjeje…",
@@ -391,6 +389,9 @@ UI = {
     "Recopie de l'écran vers un autre appareil arrêtée": "Pasqyrimi i ekranit në një pajisje tjetër u ndal",
     "Partage de position avec 1 personne arrêté": "Ndarja e vendndodhjes me 1 person u ndal",
     "2 appareils inconnus déconnectés de votre compte": "2 pajisje të panjohura u shkëputën nga llogaria juaj",
+    # Cloud privé lié à l'appareil (pas de récupération depuis un autre appareil)
+    "Preuves et journal sont gardés dans votre cloud privé, liés à ce téléphone. Pour ne rien perdre s'il est cassé ou confisqué, exportez le dossier (.zip) et confiez-le à une personne de confiance ou au Centre LAVI.": "Provat dhe ditari ruhen në cloud-in tuaj privat, të lidhura me këtë telefon. Që të mos humbni asgjë nëse prishet ose ju merret, eksportoni dosjen (.zip) dhe jepjani një personi të besuar ose Qendrës LAVI.",
+    "Preuves et journal restent dans votre cloud privé. Exportez le dossier (.zip) depuis le Coffre pour en garder une copie en lieu sûr.": "Provat dhe ditari mbeten në cloud-in tuaj privat. Eksportoni dosjen (.zip) nga Kasaforta për të ruajtur një kopje në vend të sigurt.",
 }
 
 # ---------------------------------------------------------------------------

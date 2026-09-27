@@ -350,7 +350,6 @@ UI = {
     "{n} articles retirés": "{n} artículos quitados",
     "Je suis partie · dernier recours": "Me he ido · último recurso",
     "Sauvegardé dans votre cloud privé": "Guardado en tu nube privada",
-    "Preuves et journal sont gardés hors du téléphone. S'il est cassé, perdu ou confisqué, vous retrouvez tout depuis un autre appareil avec votre accès discret.": "Las pruebas y el diario se guardan fuera del teléfono. Si se rompe, se pierde o te lo quitan, lo recuperas todo desde otro dispositivo con tu acceso discreto.",
     "Tous": "Todas",
     "Entrées": "Entrantes",
     "Plats": "Platos",
@@ -379,7 +378,6 @@ UI = {
     "Maintenir pour tout couper": "Mantén pulsado para cortarlo todo",
     "Protection en cours…": "Protegiéndote…",
     "Vos preuves sont en sécurité": "Tus pruebas están a salvo",
-    "Preuves et journal restent sauvegardés dans votre cloud privé, même si ce téléphone est cassé ou repris.": "Las pruebas y el diario siguen guardados en tu nube privada, aunque este teléfono se rompa o te lo quiten.",
     "Depuis un autre appareil, changez aussi vos mots de passe (e-mail, compte Apple ou Google).": "Desde otro dispositivo, cambia también tus contraseñas (correo, cuenta de Apple o Google).",
     "Terminé": "Listo",
     "Recherche des applis de surveillance…": "Buscando apps de vigilancia…",
@@ -391,6 +389,9 @@ UI = {
     "Recopie de l'écran vers un autre appareil arrêtée": "Duplicado de pantalla en otro dispositivo detenido",
     "Partage de position avec 1 personne arrêté": "Ubicación compartida con 1 persona detenida",
     "2 appareils inconnus déconnectés de votre compte": "2 dispositivos desconocidos desconectados de tu cuenta",
+    # Cloud privé lié à l'appareil (pas de récupération depuis un autre appareil)
+    "Preuves et journal sont gardés dans votre cloud privé, liés à ce téléphone. Pour ne rien perdre s'il est cassé ou confisqué, exportez le dossier (.zip) et confiez-le à une personne de confiance ou au Centre LAVI.": "Las pruebas y el diario se guardan en tu nube privada, vinculados a este teléfono. Para no perder nada si se rompe o te lo quitan, exporta el expediente (.zip) y confíalo a una persona de confianza o al Centro LAVI.",
+    "Preuves et journal restent dans votre cloud privé. Exportez le dossier (.zip) depuis le Coffre pour en garder une copie en lieu sûr.": "Las pruebas y el diario siguen en tu nube privada. Exporta el expediente (.zip) desde la Caja fuerte para guardar una copia en un lugar seguro.",
 }
 
 # ---------------------------------------------------------------------------

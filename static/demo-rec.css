@@ -5,7 +5,8 @@
    ========================================================================== */
 
 /* Rangée : téléphone | panneau "ce que montre l'enregistrement" */
-.demo-row { display: flex; align-items: center; justify-content: center; gap: 48px; }
+/* Trop étroit pour les deux côte à côte : le panneau passe sous le téléphone (place pour les libellés) */
+.demo-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 44px 48px; }
 
 /* Bouton de contrôle, dans l'espace vide en haut à gauche de la page */
 .demo-rec-btn {
@@ -56,8 +57,14 @@ body.demo-recording .demo-rec-panel { display: block; }
 }
 @keyframes demo-rec-blink { 50% { opacity: 0; } }
 
-/* Sur un vrai téléphone (plein écran) : pas de démo */
+/* Écran moyen : le bouton flottant chevaucherait le téléphone → il passe dans la page, au-dessus */
+@media (max-width: 900px) {
+  .demo-rec-btn { position: static; align-self: center; }
+}
+
+/* Sur un téléphone (plein écran) : pas de démo. demo-rec.js ne crée alors rien ; ceci couvre
+   une fenêtre d'ordinateur réduite après chargement (les enveloppes s'effacent de la mise en page). */
 @media (max-width: 520px), (max-height: 700px) {
   .demo-rec-btn, .demo-rec-panel, .demo-cap { display: none !important; }
-  .demo-row { display: contents; }
+  .demo-row, .demo-phone-slot { display: contents; }
 }

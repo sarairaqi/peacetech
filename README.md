@@ -28,8 +28,14 @@ python app.py --host 0.0.0.0
 # iPhone : Partager > « Sur l'écran d'accueil » → l'icône « Petits Plats » apparaît comme une vraie app
 ```
 
-Pour repartir de zéro (premier lancement, preuves effacées) : `python app.py --reset`
-ou, dans l'espace protégé, Réglages → « Réinitialiser la démo ». La langue choisie est conservée.
+Pour repartir de zéro (premier lancement, preuves effacées) : `python app.py --reset` (tous les
+appareils) ou, dans l'espace protégé, Réglages → « Réinitialiser la démo » (cet appareil seulement).
+La langue choisie est conservée.
+
+**Un appareil = un compte.** Chaque navigateur reçoit un cookie anonyme (`pp_device`, HttpOnly, 2 ans)
+et a ses propres données : recette secrète, coffre, journal, réglages, langue. Deux téléphones ne
+voient jamais les données l'un de l'autre, et un jeton ouvert sur l'un est refusé sur l'autre.
+Effacer le cookie (ou changer de navigateur) = nouvel appareil, sans accès aux anciennes données.
 
 ## Langues
 
@@ -133,10 +139,10 @@ peacetech/
 ├── static/abri-logo.png   # logo d'Abri (pour la présentation)
 ├── static/vendor/leaflet/  # Leaflet 1.9.4 (carte de l'onglet Position), chargé seulement
 │                     #   une fois Abri ouvert ; fonds de carte : OpenStreetMap
-└── storage/          # créé à l'usage (ignoré par git) : config.json (secrets), evidence/ +
+└── storage/devices/<id>/  # un dossier par appareil (ignoré par git) : config.json (secrets), evidence/ +
                       #   evidence.json (preuves), journal.json, location_audit.json,
                       #   last_result.json (dernier questionnaire), prefs.json (réglages),
-                      #   favoris.json, lang.json
+                      #   favoris.json, lang.json, sessions.json
 ```
 
 Python a été choisi plutôt que Java : Flask tient en un fichier, l'upload de fichiers est
@@ -145,7 +151,7 @@ natif, et l'interface web s'affiche telle quelle sur un vrai téléphone pour la
 ## Comment fonctionne l'accès secret
 
 `POST /api/cover/adapt {recipe_id, persons}` renvoie toujours les quantités adaptées (comportement
-normal). Si le couple correspond au secret stocké dans `storage/config.json`, la réponse contient
+normal). Si le couple correspond au secret stocké dans `storage/devices/<id>/config.json`, la réponse contient
 en plus un jeton ; l'interface bascule alors sur Abri et envoie ce jeton (`X-Abri-Token`) sur toutes
 les routes protégées. Le jeton vit en mémoire côté serveur et en mémoire côté navigateur :
 rien n'est écrit dans le navigateur (pas de localStorage, pas d'URL), le titre de l'onglet reste
@@ -178,7 +184,7 @@ révèlent rien de l'espace protégé.
   Une app native pourrait détecter les profils MDM, les partages actifs et les appareils du compte.
 - **Votre position sur la carte** : point fixe (centre de Lausanne / place de la Riponne quand la
   position est figée), pas la géolocalisation réelle.
-- **Chiffrement du coffre** : les fichiers sont stockés en clair dans `storage/evidence/`
+- **Chiffrement du coffre** : les fichiers sont stockés en clair dans `storage/devices/<id>/evidence/`
   (l'horodatage et l'empreinte SHA-256 sont réels).
 - **Sauvegarde dans le cloud privé** : l'encadré du Coffre l'annonce, mais les preuves restent sur
   le serveur local du prototype. Une vraie version les chiffrerait et les copierait hors du téléphone,

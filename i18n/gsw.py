@@ -354,7 +354,6 @@ UI = {
     "{n} articles retirés": "{n} Artikel entfernt",
     "Je suis partie · dernier recours": "Ich bi gange · letschti Möglichkeit",
     "Sauvegardé dans votre cloud privé": "I dinere private Cloud gsicheret",
-    "Preuves et journal sont gardés hors du téléphone. S'il est cassé, perdu ou confisqué, vous retrouvez tout depuis un autre appareil avec votre accès discret.": "Bewiis und Tagebuech wärded usserhalb vom Telefon bhalte. Wänn s kaputt, verlore oder beschlagnahmt isch, findsch alles uf emne andere Grät mit dim diskrete Zuegang wieder.",
     "Tous": "Alli",
     "Entrées": "Vorspiise",
     "Plats": "Hauptgäng",
@@ -383,7 +382,6 @@ UI = {
     "Maintenir pour tout couper": "Hebe, zum alles abstelle",
     "Protection en cours…": "Schutz lauft…",
     "Vos preuves sont en sécurité": "Dini Bewiis sind sicher",
-    "Preuves et journal restent sauvegardés dans votre cloud privé, même si ce téléphone est cassé ou repris.": "Bewiis und Tagebuech bliibed i dinere private Cloud gspeicheret, au wänn das Handy kaputt gaht oder dir wäggnoh wird.",
     "Depuis un autre appareil, changez aussi vos mots de passe (e-mail, compte Apple ou Google).": "Vo emne andere Grät us: änder au dini Passwörter (E-Mail, Apple- oder Google-Konto).",
     "Terminé": "Fertig",
     "Recherche des applis de surveillance…": "Überwachigs-Apps sueche…",
@@ -395,6 +393,9 @@ UI = {
     "Recopie de l'écran vers un autre appareil arrêtée": "Bildschirm-Spiegle uf es anders Grät gstoppt",
     "Partage de position avec 1 personne arrêté": "Standort-Teile mit 1 Person gstoppt",
     "2 appareils inconnus déconnectés de votre compte": "2 unbekannti Grät vo dim Konto abgmäldet",
+    # Cloud privé lié à l'appareil (pas de récupération depuis un autre appareil)
+    "Preuves et journal sont gardés dans votre cloud privé, liés à ce téléphone. Pour ne rien perdre s'il est cassé ou confisqué, exportez le dossier (.zip) et confiez-le à une personne de confiance ou au Centre LAVI.": "Bewiis und Tagebuech sind i dinere private Cloud gspeicheret, a das Handy bunde. Dass nüüt verlore gaht, wänn s kaputt gaht oder dir wäggnoh wird: exportier s Dossier (.zip) und gib s ere Vertrauensperson oder em LAVI-Zentrum.",
+    "Preuves et journal restent dans votre cloud privé. Exportez le dossier (.zip) depuis le Coffre pour en garder une copie en lieu sûr.": "Bewiis und Tagebuech bliibed i dinere private Cloud. Exportier s Dossier (.zip) im Tresor, zum e Kopie amene sichere Ort ha.",
 }
 
 # ---------------------------------------------------------------------------
