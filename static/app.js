@@ -649,7 +649,7 @@ const fmtTime = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : `${St
 // Correspondances contenu → icône / teinte (le contenu de content.py garde ses emojis, l'interface ne les montre plus)
 const AXIS_ICON = { urgence: 'lifebuoy', sante: 'cross', securite: 'shield', justice: 'scale', migration: 'globe', conseils: 'chat' };
 const AXIS_TONE = { urgence: 'or', sante: 'menthe', securite: 'bleu', justice: 'rose', migration: 'peche', conseils: 'lavande' };
-const AXIS_ORDER = ['securite', 'sante', 'justice', 'migration', 'conseils'];
+const AXIS_ORDER = ['urgence', 'securite', 'sante', 'justice', 'migration', 'conseils'];
 const QUIZ_ICON = { physique: 'hand', psychologique: 'speech', sexuelle: 'shieldx', economique: 'coins', mariage: 'rings' };
 const QUIZ_TONE = { physique: 'rose', psychologique: 'lavande', sexuelle: 'peche', economique: 'or', mariage: 'menthe' };
 const ACTION_ICON = { '🚨': 'siren', '📞': 'phone', '🏠': 'home', '🩺': 'cross', '⚖️': 'scale', '💬': 'chat', '🗂️': 'folder', '📝': 'pen', '📍': 'pin' };
@@ -697,11 +697,13 @@ function renderApp() {
 function posBar() {
   const on = isFrozen(); const at = (S.boot.prefs_at || {}).freeze_location;
   return `<div class="pos-bar ${on ? 'on' : ''}">
-    <button class="pos-main" data-action="tab" data-tab="loc">
+    <button class="pos-main" data-action="tab" data-tab="loc" title="Voir la page Position">
       <span class="ic ${on ? 'tone-lavande' : 'tone-rose'}">${on ? LI.lock : LI.pin}</span>
-      <span style="min-width:0"><b>${on ? 'Position figée' : 'Ma position'}</b><small>${on ? `Les applis voient ${esc(FREEZE_PLACE)}${at ? ` · depuis ${fmtTime(at)}` : ''}` : 'Réelle · touchez l\'interrupteur pour la figer'}</small></span>
+      <span style="min-width:0"><b>${on ? 'Position figée' : 'Figer ma position'}</b>
+        <small>${on ? `Les applis et les personnes qui vous suivent voient ${esc(FREEZE_PLACE)}, pas vos déplacements${at ? ` · depuis ${fmtTime(at)}` : ''}.`
+                    : 'Les applis et les personnes qui vous suivent verront un lieu fixe, pas vos déplacements.'}</small></span>
     </button>
-    <button class="switch lu ${on ? 'on' : ''}" data-action="freeze-toggle" aria-label="Figer ma position" title="${on ? 'Rendre ma position réelle' : 'Figer ma position'}"></button>
+    <button class="pos-btn ${on ? 'on' : ''}" data-action="freeze-toggle" aria-label="${on ? 'Rendre ma position réelle' : 'Figer ma position'}">${on ? `${LI.lock}<span>Figée</span><small>toucher pour rétablir</small>` : `${LI.lock}<span>Figer</span><small>en un geste</small>`}</button>
   </div>`;
 }
 
@@ -722,19 +724,14 @@ function appHome() {
   const rec = B.last_result ? B.last_result.contacts.filter((c) => !c.pinned) : [];
   const hour = new Date().getHours();
   const greet = hour < 6 ? 'Bonne nuit' : hour < 12 ? 'Bonjour' : hour < 18 ? 'Bon après-midi' : 'Bonsoir';
-  const malley = B.contacts.find((c) => c.id === 'malley_urg');
   return `<div class="fade-in">
-    <div class="hero"><div class="h-greet">${greet}</div><h2>Vous êtes en sécurité ici.</h2>
-      <p>Cet espace est invisible depuis le téléphone. « ${S.front === 'wiki' ? 'Retour à Wikipédia' : 'Retour en cuisine'} » le referme aussitôt.</p></div>
-    <button class="call-big" data-action="call" data-id="victimes142"><span class="ic round">${LI.phone}</span><span><b>Parler à quelqu'un maintenant</b><small>142 · gratuit, confidentiel, 24h/24</small></span><span class="go">${LI.chevR}</span></button>
-    <div class="tiles">
-      <button class="tile" data-action="sos"><span class="ic tone-sos">${LI.siren}</span><b>Danger immédiat</b><small>Police · 117</small></button>
-      <button class="tile" data-action="call" data-id="malley_urg"><span class="ic tone-peche">${LI.home}</span><b>Un endroit où dormir</b><small>${malley ? esc(malley.org) : 'Hébergement d\'urgence'}</small></button>
-      ${B.last_result ? '' : `<button class="tile wide" data-action="tab" data-tab="quiz"><span class="ic tone-lavande">${LI.list}</span><div><b>Faire le point sur ma situation</b><small>22 questions oui / non, 3 minutes. Abri vous oriente ensuite.</small></div><span class="chev">${LI.chevR}</span></button>`}
-    </div>
+    <div class="hero compact"><div class="h-greet">${greet}</div><h2>Vous êtes en sécurité ici.</h2>
+      <p>Espace invisible depuis le téléphone. « ${S.front === 'wiki' ? 'Retour à Wikipédia' : 'Retour en cuisine'} » le referme aussitôt.</p></div>
+    ${B.last_result ? '' : `<button class="tile wide" data-action="tab" data-tab="quiz"><span class="ic tone-lavande">${LI.list}</span><div><b>Faire le point sur ma situation</b><small>22 questions oui / non, 3 minutes. Abri vous oriente ensuite.</small></div><span class="chev">${LI.chevR}</span></button>`}
     ${rec.length ? `<div class="section-title">Recommandés pour vous</div>${rec.map(contactCard).join('')}` : ''}
-    <div class="section-title">Tous les services vaudois</div>
-    ${AXIS_ORDER.map((ax) => { const list = B.contacts.filter((c) => c.axis === ax && !c.pinned); const open = !!H.open[ax];
+    <div class="section-title">À qui parler — services vaudois</div>
+    ${AXIS_ORDER.map((ax) => { const list = B.contacts.filter((c) => c.axis === ax); const open = !!H.open[ax];
+      if (!list.length) return '';
       return `<button class="axis-head ${open ? 'open' : ''}" data-action="axis-toggle" data-axis="${ax}">${ic(AXIS_ICON[ax], AXIS_TONE[ax])}${esc(B.axes[ax].label)}<span class="n">${list.length}</span><span class="chev">${LI.chevR}</span></button>${open ? `<div class="axis-body">${list.map(contactCard).join('')}</div>` : ''}`; }).join('')}
     <button class="tile wide" style="margin-top:14px;width:100%" data-action="tab" data-tab="res"><span class="ic tone-menthe">${LI.book}</span><div><b>Guides et témoignages</b><small>Partir en sécurité, porter plainte, mes droits…</small></div><span class="chev">${LI.chevR}</span></button>
     <p class="tiny muted" style="text-align:center;margin-top:14px">Réseau vaudois de lutte contre la violence domestique — canton de Vaud. Les appels passent par ${APP_NAME} : rien dans l'historique du téléphone.</p>
@@ -879,7 +876,7 @@ function appLocation() {
     return `<button class="group-head ${open ? 'open' : ''}" data-action="group-toggle" data-group="${esc(g.id)}">${ic(LOC_GROUP_ICON[g.id] || 'eye', LOC_GROUP_TONE[g.id] || 'rose')}<span>${esc(g.title)}</span><span class="n">${nd}/${items.length}</span><span class="chev">${LI.chevR}</span></button>${open ? items.map(item).join('') : ''}`; };
 
   return `<div class="fade-in"><div class="page-title">Ma position</div><p class="page-sub">Décidez qui peut savoir où vous êtes.</p>
-    <div class="freeze-card ${on ? 'on' : ''}"><div class="fc-row">${ic(on ? 'lock' : 'pin', on ? 'lavande' : 'rose', 'lg')}<div><b>${on ? 'Position figée' : 'Figer ma position'}</b><small>${on ? `Les applis et les partages voient ${esc(FREEZE_PLACE)}${at ? ` depuis ${fmtTime(at)}` : ''}.` : 'Un lieu fixe est montré aux applis et aux partages, pas vos déplacements.'}</small></div><button class="switch lu ${on ? 'on' : ''}" data-action="freeze-toggle" aria-label="Figer ma position"></button></div>
+    <div class="freeze-card ${on ? 'on' : ''}"><div class="fc-row">${ic(on ? 'lock' : 'pin', on ? 'lavande' : 'rose')}<div><b>${on ? 'Position figée' : 'Figer ma position'}</b><small>${on ? `Les applis et les personnes qui vous suivent voient ${esc(FREEZE_PLACE)}${at ? ` depuis ${fmtTime(at)}` : ''}.` : 'Les applis et les personnes qui vous suivent verront un lieu fixe, pas vos déplacements.'}</small></div><button class="pos-btn ${on ? 'on' : ''}" data-action="freeze-toggle" aria-label="${on ? 'Rendre ma position réelle' : 'Figer ma position'}">${LI.lock}<span>${on ? 'Figée' : 'Figer'}</span><small>${on ? 'toucher pour rétablir' : 'en un geste'}</small></button></div>
       <p>${on ? 'Vous pouvez bouger librement : rien ne change pour les personnes qui vous suivent. Désactivez pour revenir à votre position réelle.' : 'Utile avant un rendez-vous au Centre LAVI ou chez l\'avocat·e, ou pour préparer un départ.'}</p></div>
     <div class="section-title">Où trouver de l'aide près de vous</div>
     <div id="map-slot" class="map-slot"><div class="map-loading"><span class="spinner"></span> Chargement de la carte…</div></div>
@@ -1114,12 +1111,12 @@ function appResources() {
   const R = S.boot.resources;
   return `<div class="fade-in"><div class="page-title">Guides et témoignages</div><p class="page-sub">Comprendre, préparer, agir. À votre rythme.</p>
     <div class="section-title">Guides pratiques</div>
-    ${R.guides.map((g) => `<button class="guide-card" data-action="res-open" data-id="${esc(g.id)}">${ic(GUIDE_ICON[g.icon] || 'book', g.tone || 'rose')}<div><b>${esc(g.title)}</b><span>${esc(g.summary)}</span></div><span class="chev">${LI.chevR}</span></button>`).join('')}
+    ${R.guides.map((g) => `<button class="guide-card" data-action="res-open" data-id="${esc(g.id)}">${ic(GUIDE_ICON[g.icon] || 'book', g.tone || 'rose', 'lg')}<div><b>${esc(g.title)}</b><span>${esc(g.summary)}</span></div><span class="chev">${LI.chevR}</span></button>`).join('')}
     <div class="section-title">Elles en parlent</div>
-    ${R.testimonies.map((t) => `<div class="quote-card"><p>${esc(t.text)}</p><small>${esc(t.name)}</small></div>`).join('')}
+    ${R.testimonies.map((t) => `<div class="quote-card">${ic('heart', 'rose', 'lg')}<div><p>${esc(t.text)}</p><small>${esc(t.name)}</small></div></div>`).join('')}
     <p class="illus-note">Récits illustratifs écrits pour le prototype — à remplacer par des témoignages recueillis avec l'accord des personnes.</p>
     <div class="section-title">Sites utiles</div>
-    ${R.links.map((l) => `<button class="link-card" data-action="web" data-url="${esc(l.url)}">${ic('link', 'lavande', 'sm')}<div><b>${esc(l.title)}</b><span>${esc(l.desc)}</span></div><span class="chev">${LI.chevR}</span></button>`).join('')}
+    ${R.links.map((l) => `<button class="link-card" data-action="web" data-url="${esc(l.url)}">${ic('link', 'lavande')}<div><b>${esc(l.title)}</b><span>${esc(l.desc)}</span></div><span class="chev">${LI.chevR}</span></button>`).join('')}
     <p class="ev-note">${LI.info}<span>${esc(R.links_note)}</span></p>
   </div>`;
 }
@@ -1199,7 +1196,7 @@ function renderOverlay() {
     const c = g.contact ? S.boot.contacts.find((x) => x.id === g.contact) : null;
     const gotoLabel = { ev: 'Ouvrir le coffre', loc: 'Vérifier ma position', quiz: 'Faire le point' }[g.goto];
     overlaysEl.innerHTML = `<div class="overlay dim" data-action="overlay-close"><div class="sheet guide-sheet" data-stop><div class="grip"></div>
-      <div class="g-head">${ic(GUIDE_ICON[g.icon] || 'book', g.tone || 'rose')}<h3>${esc(g.title)}</h3></div>
+      <div class="g-head">${ic(GUIDE_ICON[g.icon] || 'book', g.tone || 'rose', 'lg')}<h3>${esc(g.title)}</h3></div>
       <p class="g-intro">${esc(g.intro)}</p>
       <ol class="g-steps">${g.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>
       <div class="g-acts">${c ? `<button class="btn primary" data-action="call" data-id="${esc(c.id)}">${LI.phone} ${esc(c.org.length > 22 ? c.title : c.org)}</button>` : ''}${g.goto ? `<button class="btn lav" data-action="res-goto" data-goto="${esc(g.goto)}">${gotoLabel}</button>` : ''}</div>
@@ -1254,13 +1251,15 @@ function renderOverlay() {
 // futur point de branchement du modèle d'IA.
 function openChat() {
   if (S.mode !== 'app' || !S.boot) return;
+  if (S.overlay && S.overlay.type === 'chat') { closeChat(); return; }
   S.overlay = { type: 'chat', anim: true }; renderOverlay(); S.overlay.anim = false;
 }
 function closeChat() {
   const w = $('.chat-wrap', overlaysEl);
-  if (!w) return;
-  w.classList.add('closing');
-  setTimeout(() => { if (S.overlay && S.overlay.type === 'chat') { S.overlay = null; renderOverlay(); } }, 180);
+  if (S.overlay && S.overlay.type === 'chat') S.overlay = null;   // fermé tout de suite : un nouveau geste (robot, onglet) est pris en compte
+  if (!w) { renderOverlay(); return; }
+  w.classList.add('closing');                                      // l'animation finit toute seule, sans bloquer les clics
+  setTimeout(() => { if (!S.overlay && w.isConnected) overlaysEl.innerHTML = ''; }, 180);
 }
 async function chatSend(raw) {
   const Ch = S.chat; const text = String(raw || '').trim();

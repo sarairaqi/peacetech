@@ -185,6 +185,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
   position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%) translateY(20px);
   background: #111; color: #fff; padding: 12px 18px; border-radius: 14px; font-size: 14px; font-weight: 600;
   opacity: 0; transition: all .25s ease; z-index: 60; white-space: nowrap; box-shadow: 0 10px 30px rgba(0,0,0,.4);
+  pointer-events: none; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
@@ -348,16 +349,22 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 .exit-btn svg { width: 15px; height: 15px; color: var(--a-primary); }
 
 /* Barre « Ma position » : présente en haut de chaque page, un geste pour figer */
-.pos-bar { display: flex; align-items: center; gap: 10px; margin: 2px 16px 10px; padding: 8px 8px 8px 10px; border-radius: 16px;
-  background: var(--a-surface); border: 1px solid var(--a-border); transition: background .25s, box-shadow .25s; }
+.pos-bar { display: flex; align-items: center; gap: 10px; margin: 4px 16px 12px; padding: 10px 10px 10px 12px; border-radius: 20px;
+  background: linear-gradient(135deg, rgba(255, 158, 196, .16), rgba(255, 191, 155, .08)); border: 1.5px solid rgba(255, 158, 196, .45);
+  box-shadow: 0 6px 20px rgba(255, 158, 196, .12); transition: background .25s, box-shadow .25s, border-color .25s; }
 .pos-bar .pos-main { flex: 1; display: flex; align-items: center; gap: 10px; text-align: left; color: var(--a-text); min-width: 0; }
-.pos-bar .ic { width: 36px; height: 36px; border-radius: 12px; }
-.pos-bar .ic svg.i { width: 18px; height: 18px; }
-.pos-bar b { display: block; font-size: 13.5px; line-height: 1.15; }
-.pos-bar small { display: block; font-size: 11.5px; color: var(--a-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pos-bar .chev { color: var(--a-muted); }
-.pos-bar .chev svg.i { width: 16px; height: 16px; }
-.pos-bar.on { background: linear-gradient(135deg, rgba(196, 176, 255, .22), rgba(255, 158, 196, .12)); border-color: rgba(196, 176, 255, .45); box-shadow: 0 0 0 4px rgba(196, 176, 255, .08); }
+.pos-bar .ic { width: 42px; height: 42px; border-radius: 14px; }
+.pos-bar .ic svg.i { width: 21px; height: 21px; }
+.pos-bar b { display: block; font-size: 15px; line-height: 1.15; }
+.pos-bar small { display: block; font-size: 11.5px; color: var(--a-muted); margin-top: 3px; line-height: 1.3; }
+.pos-btn { flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-width: 76px; padding: 8px 10px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--a-primary), #ff8bb8); color: #2a1030; box-shadow: 0 6px 16px rgba(255, 158, 196, .35); line-height: 1; }
+.pos-btn svg.i { width: 17px; height: 17px; stroke-width: 2.2; margin-bottom: 2px; }
+.pos-btn span { font-size: 13.5px; font-weight: 900; }
+.pos-btn small { font-size: 9px; font-weight: 700; opacity: .75; }
+.pos-btn.on { background: linear-gradient(135deg, var(--a-lav), #9d86e8); color: #1e1230; box-shadow: 0 6px 16px rgba(196, 176, 255, .35); }
+.pos-btn:active { transform: scale(.96); }
+.pos-bar.on { background: linear-gradient(135deg, rgba(196, 176, 255, .22), rgba(255, 158, 196, .1)); border-color: rgba(196, 176, 255, .55); box-shadow: 0 0 0 4px rgba(196, 176, 255, .1); }
 .pos-bar.on small { color: var(--a-lav); }
 .switch.lu { flex: none; width: 46px; height: 27px; background: #4a3a63; }
 .switch.lu::after { width: 21px; height: 21px; }
@@ -418,6 +425,11 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 .hero .h-greet { position: relative; font-size: 13px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--a-lav); }
 .hero h2 { position: relative; margin: 6px 0 4px; font-size: 24px; font-weight: 900; letter-spacing: -.02em; line-height: 1.15; max-width: 78%; }
 .hero p { position: relative; margin: 0; font-size: 13.5px; color: var(--a-muted); line-height: 1.45; max-width: 82%; }
+.hero.compact { padding: 13px 16px 12px; margin: 0 0 12px; border-radius: 20px; }
+.hero.compact::after { width: 40px; height: 40px; right: 16px; top: 14px; box-shadow: 0 0 22px 8px rgba(255, 190, 215, .3); }
+.hero.compact .h-greet { font-size: 11.5px; }
+.hero.compact h2 { font-size: 18px; margin: 3px 0 3px; }
+.hero.compact p { font-size: 12.5px; }
 .call-big { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 16px; border-radius: 20px; text-align: left; margin-bottom: 10px;
   background: linear-gradient(135deg, var(--a-primary), #ff8bb8); color: #2a1030; box-shadow: 0 10px 26px rgba(255, 158, 196, .3); }
 .call-big .ic { background: rgba(42, 16, 48, .16); color: #2a1030; }
@@ -510,6 +522,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 .freeze-card { position: relative; overflow: hidden; border-radius: 22px; padding: 16px; margin-bottom: 12px; background: var(--a-surface); border: 1px solid var(--a-border); }
 .freeze-card.on { background: linear-gradient(135deg, rgba(196, 176, 255, .22), rgba(255, 158, 196, .1)); border-color: rgba(196, 176, 255, .45); }
 .freeze-card .fc-row { display: flex; align-items: center; gap: 12px; }
+.freeze-card .pos-btn { min-width: 82px; }
 .freeze-card .fc-row > div { flex: 1; min-width: 0; }
 .freeze-card b { display: block; font-size: 16px; }
 .freeze-card small { display: block; color: var(--a-muted); font-size: 12.5px; line-height: 1.35; margin-top: 2px; }
@@ -655,11 +668,11 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 /* Ressources : guides, paroles, liens */
 .guide-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; border-radius: 20px; background: var(--a-surface); border: 1px solid var(--a-border); color: var(--a-text); text-align: left; margin-bottom: 8px; }
 .guide-card > div { flex: 1; min-width: 0; }
-.guide-card b { display: block; font-size: 14.5px; line-height: 1.25; }
+.guide-card b { display: block; font-size: 15px; line-height: 1.25; }
 .guide-card span { display: block; color: var(--a-muted); font-size: 12.5px; line-height: 1.35; margin-top: 2px; }
 .guide-card .chev { color: var(--a-muted); }
-.quote-card { position: relative; padding: 16px 16px 14px 18px; border-radius: 20px; margin-bottom: 10px; background: linear-gradient(135deg, rgba(255, 158, 196, .12), rgba(196, 176, 255, .1)); border: 1px solid rgba(255, 255, 255, .07); }
-.quote-card::before { content: "“"; position: absolute; left: 14px; top: 2px; font-size: 44px; font-weight: 900; color: rgba(255, 158, 196, .35); line-height: 1; }
+.quote-card { position: relative; display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px 14px 14px; border-radius: 20px; margin-bottom: 10px; background: linear-gradient(135deg, rgba(255, 158, 196, .12), rgba(196, 176, 255, .1)); border: 1px solid rgba(255, 255, 255, .07); }
+.quote-card > div { flex: 1; min-width: 0; }
 .quote-card p { margin: 0; font-size: 14px; line-height: 1.5; font-style: italic; }
 .quote-card small { display: block; margin-top: 8px; font-size: 12.5px; font-weight: 800; color: var(--a-lav); }
 .link-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; border-radius: 18px; background: var(--a-surface); border: 1px solid var(--a-border); color: var(--a-text); text-align: left; margin-bottom: 8px; }
@@ -1049,7 +1062,7 @@ body:has(.phone.on-wiki) .stage-hint { color: #54595d; font-weight: 400; }
 .overlay.chat-wrap { flex-direction: row; background: rgba(5, 9, 18, .55); transition: opacity .18s; }
 .chat-wrap.anim { animation: chat-fade .2s ease; }
 .chat-wrap.anim .chat-panel { animation: chat-in .26s cubic-bezier(.2, .8, .2, 1); }
-.chat-wrap.closing { opacity: 0; }
+.chat-wrap.closing { opacity: 0; pointer-events: none; }
 .chat-wrap.closing .chat-panel { transform: translateX(-100%); transition: transform .18s ease-in; }
 @keyframes chat-in { from { transform: translateX(-100%); } to { transform: none; } }
 @keyframes chat-fade { from { opacity: 0; } to { opacity: 1; } }
