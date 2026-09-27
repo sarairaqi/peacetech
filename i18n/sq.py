@@ -352,6 +352,17 @@ UI = {
     "Plats": "Pjata kryesore",
     "Desserts": "Ëmbëlsira",
     "Boulangerie": "Furra",
+    # Accueil allégé / bouton « Figer » (fusion avec origin/main)
+    "Voir la page Position": "Shiko faqen Vendndodhja",
+    "Les applis et les personnes qui vous suivent voient {place}, pas vos déplacements": "Aplikacionet dhe personat që ju ndjekin shohin {place}, jo lëvizjet tuaja",
+    "Les applis et les personnes qui vous suivent voient {place}": "Aplikacionet dhe personat që ju ndjekin shohin {place}",
+    "Les applis et les personnes qui vous suivent verront un lieu fixe, pas vos déplacements.": "Aplikacionet dhe personat që ju ndjekin do të shohin një vend të fiksuar, jo lëvizjet tuaja.",
+    "Figée": "E ngrirë",
+    "toucher pour rétablir": "prekni për ta rikthyer",
+    "Figer": "Ngrij",
+    "en un geste": "me një prekje",
+    "Espace invisible depuis le téléphone. « {back} » le referme aussitôt.": "Hapësirë e padukshme nga telefoni. «{back}» e mbyll menjëherë.",
+    "À qui parler — services vaudois": "Me kë të flisni — shërbimet në Vaud",
 }
 
 # ---------------------------------------------------------------------------

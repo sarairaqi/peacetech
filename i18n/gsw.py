@@ -356,6 +356,17 @@ UI = {
     "Plats": "Hauptgäng",
     "Desserts": "Dessert",
     "Boulangerie": "Bachwar",
+    # Accueil allégé / bouton « Figer » (fusion avec origin/main)
+    "Voir la page Position": "Siite «Standort» aaluege",
+    "Les applis et les personnes qui vous suivent voient {place}, pas vos déplacements": "D Apps und d Lüüt, wo dir folged, gsehnd {place}, nöd dini Wääg",
+    "Les applis et les personnes qui vous suivent voient {place}": "D Apps und d Lüüt, wo dir folged, gsehnd {place}",
+    "Les applis et les personnes qui vous suivent verront un lieu fixe, pas vos déplacements.": "D Apps und d Lüüt, wo dir folged, gsehnd en feste Ort, nöd dini Wääg.",
+    "Figée": "Iigfrore",
+    "toucher pour rétablir": "tippe zum Zruggsetze",
+    "Figer": "Iifriere",
+    "en un geste": "mit eim Griff",
+    "Espace invisible depuis le téléphone. « {back} » le referme aussitôt.": "Vom Handy uus unsichtbar. «{back}» macht s sofort zue.",
+    "À qui parler — services vaudois": "Mit wem rede — Stelle im Kanton Waadt",
 }
 
 # ---------------------------------------------------------------------------

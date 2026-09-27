@@ -352,6 +352,17 @@ UI = {
     "Plats": "Pratos",
     "Desserts": "Sobremesas",
     "Boulangerie": "Padaria",
+    # Accueil allégé / bouton « Figer » (fusion avec origin/main)
+    "Voir la page Position": "Ver a página Localização",
+    "Les applis et les personnes qui vous suivent voient {place}, pas vos déplacements": "As apps e as pessoas que a seguem veem {place}, não as suas deslocações",
+    "Les applis et les personnes qui vous suivent voient {place}": "As apps e as pessoas que a seguem veem {place}",
+    "Les applis et les personnes qui vous suivent verront un lieu fixe, pas vos déplacements.": "As apps e as pessoas que a seguem verão um local fixo, não as suas deslocações.",
+    "Figée": "Fixada",
+    "toucher pour rétablir": "tocar para repor",
+    "Figer": "Fixar",
+    "en un geste": "num só gesto",
+    "Espace invisible depuis le téléphone. « {back} » le referme aussitôt.": "Espaço invisível a partir do telemóvel. «{back}» fecha-o de imediato.",
+    "À qui parler — services vaudois": "Com quem falar — serviços do cantão de Vaud",
 }
 
 # ---------------------------------------------------------------------------

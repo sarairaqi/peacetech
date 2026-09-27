@@ -352,6 +352,17 @@ UI = {
     "Plats": "Mains",
     "Desserts": "Desserts",
     "Boulangerie": "Baking",
+    # Accueil allégé / bouton « Figer » (fusion avec origin/main)
+    "Voir la page Position": "Open the Location page",
+    "Les applis et les personnes qui vous suivent voient {place}, pas vos déplacements": "Apps and people following you see {place}, not your movements",
+    "Les applis et les personnes qui vous suivent voient {place}": "Apps and people following you see {place}",
+    "Les applis et les personnes qui vous suivent verront un lieu fixe, pas vos déplacements.": "Apps and people following you will see a fixed place, not your movements.",
+    "Figée": "Frozen",
+    "toucher pour rétablir": "tap to restore",
+    "Figer": "Freeze",
+    "en un geste": "in one tap",
+    "Espace invisible depuis le téléphone. « {back} » le referme aussitôt.": "Invisible from the phone. “{back}” closes it instantly.",
+    "À qui parler — services vaudois": "Who to talk to — services in Vaud",
 }
 
 # ---------------------------------------------------------------------------
