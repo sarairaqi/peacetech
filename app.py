@@ -1,5 +1,5 @@
 """
-app.py — Serveur du prototype Abri (Flask).
+app.py — Serveur du prototype Abri / Petits Plats (Flask).
 
 Lancer :   python app.py            → http://127.0.0.1:5000
            python app.py --host 0.0.0.0   (pour ouvrir depuis un téléphone sur le même Wi-Fi)
@@ -120,6 +120,20 @@ def cover_adapt():
     return jsonify(payload)
 
 
+@app.post("/api/cover/quick")
+def cover_quick():
+    """
+    Ouverture rapide « Face ID » (option des Réglages d'Abri). Dans ce prototype web, la
+    reconnaissance du visage est simulée par l'interface ; une vraie app passerait par la
+    biométrie du téléphone (Face ID / empreinte) avant d'appeler cette route.
+    """
+    if not L.quick_unlock_enabled():
+        abort(401)
+    token = L.new_token()
+    _sessions.add(token)
+    return jsonify({"token": token})
+
+
 # ---------------------------------------------------------------------------
 # Apparence « Wikipédia » (publique) : miroir de fr.wikipedia.org
 # ---------------------------------------------------------------------------
@@ -175,7 +189,8 @@ def _not_found(e):
 @app.get("/api/setup/status")
 def setup_status():
     return jsonify({"configured": L.is_configured(), "persons_min": L.PERSONS_MIN,
-                    "persons_max": L.PERSONS_MAX, "front": L.get_front()})
+                    "persons_max": L.PERSONS_MAX, "front": L.get_front(),
+                    "quick": L.quick_unlock_enabled()})
 
 
 @app.post("/api/setup")
@@ -212,8 +227,10 @@ def app_bootstrap():
         "evidence_categories": C.EVIDENCE_CATEGORIES,
         "features": L.FEATURES,
         "assistant": C.ASSISTANT,
+        "resources": C.RESOURCES,
         "front": L.get_front(),
         "prefs": L.get_prefs(),
+        "prefs_at": L.get_pref_times(),
         "last_result": L.last_result(),
         "audit": L.get_audit_state(),
         "evidence": L.list_evidence(),
@@ -235,7 +252,8 @@ def app_pref():
     """Mémorise une préférence (placeholder : n'active aucune fonctionnalité réelle)."""
     data = request.get_json(silent=True) or {}
     try:
-        return jsonify({"prefs": L.set_pref(data.get("key", ""), data.get("value", False))})
+        prefs = L.set_pref(data.get("key", ""), data.get("value", False))
+        return jsonify({"prefs": prefs, "prefs_at": L.get_pref_times()})
     except ValueError as e:
         abort(400, str(e))
 

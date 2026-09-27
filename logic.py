@@ -125,6 +125,22 @@ def set_config(recipe_id: str, persons: int) -> dict:
 #
 # Tant que ces trois points ne sont pas traités, l'interface présente l'option comme « à venir ».
 FEATURES = {
+    "freeze_location": {
+        "label": "Figer ma position",
+        "desc": "Les applis et les personnes qui suivent votre position voient un lieu fixe, pas vos déplacements.",
+        # 'demo' = l'interface montre l'état « figé », mais un site web ne peut pas changer la
+        # position vue par les autres applis : c'est le rôle d'une app native (voir README).
+        "status": "demo",
+        "default": False,
+        "hidden": True,            # pilotée depuis la barre « Ma position », pas depuis les Réglages
+    },
+    "face_id": {
+        "label": "Ouverture rapide (Face ID)",
+        "desc": "Depuis l'app de cuisine, gardez le doigt appuyé sur « Bonjour » : Face ID ouvre Abri sans passer par la recette.",
+        # 'demo' = animation Face ID simulée ; une vraie app utiliserait la biométrie du téléphone.
+        "status": "demo",
+        "default": False,
+    },
     "emergency_recording": {
         "label": "Enregistrement d'urgence",
         "desc": "Trois tapes sur l'écran lancent une capture vidéo de 10 min, déposée dans le coffre.",
@@ -140,13 +156,26 @@ def get_prefs() -> dict:
     return {key: bool(saved.get(key, f["default"])) for key, f in FEATURES.items()}
 
 
+def get_pref_times() -> dict:
+    """Quand chaque option a été activée pour la dernière fois (ISO), pour l'affichage « figée depuis… »."""
+    saved = _read_json(PREFS_FILE, {})
+    return {key: saved.get(f"{key}_at") for key in FEATURES if saved.get(f"{key}_at")}
+
+
 def set_pref(key: str, value: bool) -> dict:
     if key not in FEATURES:
         raise ValueError("Option inconnue")
     saved = _read_json(PREFS_FILE, {})
     saved[key] = bool(value)
+    if value:
+        saved[f"{key}_at"] = now_iso()
     _write_json(PREFS_FILE, saved)
     return get_prefs()
+
+
+def quick_unlock_enabled() -> bool:
+    """Vrai si l'ouverture rapide « Face ID » est activée (apparence recettes seulement)."""
+    return is_configured() and get_front() == "recettes" and get_prefs().get("face_id", False)
 
 
 # ---------------------------------------------------------------------------
@@ -647,7 +676,7 @@ def export_zip() -> tuple[bytes, str]:
     cats = {c["id"]: c["label"] for c in C.EVIDENCE_CATEGORIES}
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        lines = ["DOSSIER — pièces déposées dans le coffre Abri",
+        lines = ["DOSSIER — pièces déposées dans le coffre d'Abri",
                  f"Exporté le {fmt_dt(now_iso())}", "",
                  "Chaque fichier est accompagné de son empreinte SHA-256 : elle permet de prouver",
                  "qu'il n'a pas été modifié depuis son dépôt.", ""]

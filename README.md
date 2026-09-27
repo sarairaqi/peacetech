@@ -2,10 +2,12 @@
 
 Prototype d'application pour la protection numérique des victimes de violence domestique
 (canton de Vaud). L'application se présente comme une app de cuisine, **Petits Plats** ;
-l'espace protégé, **Abri**, ne s'ouvre qu'avec la bonne recette et le bon nombre de personnes.
+l'espace protégé, **Abri**, ne s'ouvre qu'avec la bonne recette et le bon nombre de personnes
+(ou, en option, d'un geste avec Face ID).
 
 > Prototype de hackathon : l'interface est complète et interactive, mais les appels VoIP,
-> les SMS et l'analyse automatique du téléphone sont **simulés** (voir « Ce qui est simulé »).
+> les SMS, l'analyse du téléphone, la position figée et Face ID sont **simulés**
+> (voir « Ce qui est simulé »).
 
 ## Lancer le prototype (VS Code)
 
@@ -34,47 +36,57 @@ ou, dans l'espace protégé, Réglages → « Réinitialiser la démo ».
 2. **App de cuisine** — recettes, recherche, favoris, liste de courses : une app ordinaire.
 3. **Mauvaise combinaison** — ouvrir la fondue, mettre 5 personnes, « Adapter les quantités » :
    la recette est simplement adaptée, aucune erreur, aucune trace.
-4. **Bonne combinaison** — 6 personnes → l'espace protégé **Abri** s'ouvre.
-5. **Situation** — questionnaire Oui/Non du canton de Vaud (22 questions, 5 formes de violence)
+4. **Bonne combinaison** — 6 personnes → l'espace protégé **Abri** s'ouvre sur l'**accueil** :
+   « Parler à quelqu'un » (142), danger immédiat (117), un endroit où dormir, puis tous les
+   services vaudois par domaine (repliés), avec leurs **adresses** et un lien « Carte ».
+5. **Barre « Ma position »** (en haut de chaque page) — un interrupteur pour **figer la position** :
+   les applis et les partages voient un lieu fixe, plus les déplacements (simulé).
+6. **Situation** — questionnaire Oui/Non du canton de Vaud (22 questions, 5 formes de violence)
    + 2 questions de contexte (enfants, permis de séjour) → niveau de danger, actions à faire,
    services recommandés, **pièces à préparer pour porter plainte**.
-6. **Localisation** — analyse automatique (simulée) puis checklist guidée : Localiser/Find My,
-   Google Maps, Snap Map, Life360, profils MDM/stalkerware, comptes reliés, AirTags,
-   « Réinitialisation d'urgence » iOS. Score de sécurité qui progresse.
-7. **Preuves** — coffre horodaté (photo de blessure, capture de messages…), empreinte SHA-256,
-   journal chronologique, état du dossier, **export ZIP** prêt pour un·e avocat·e ou le Centre LAVI.
-8. **Contacts** — réseau vaudois (142, 117, 144, UMV, MalleyPrairie, LAVI, BCI, CSP, Ordre des
-   avocats, Centre Prévention de l'Ale, violencequefaire.ch…) avec appel et message via l'app.
-9. **Assistant** (aperçu) — glisser vers la droite n'importe où dans Abri, ou toucher la bulle de
-   l'accueil : panneau de discussion avec suggestions de questions. Pas encore d'IA : la réponse est
-   fixe et renvoie vers le 142, le Centre LAVI ou « Ma situation ».
-9b. **SOS** — bouton rouge en bas : appel police 117 via l'app (pas dans l'historique d'appels).
-10. **Apparence Wikipédia** — Réglages d'Abri → « Apparence de l'app » → 📖 Wikipédia, puis
-    choisir un mot secret. L'app devient un miroir de Wikipédia (vrais articles, recherche) ;
-    taper le mot secret dans la recherche puis Entrée ouvre Abri. La recette secrète ne marche
-    plus tant que cette apparence est active.
-11. **Quitter** (ou touche Échap) — retour immédiat à l'app de cuisine ; verrouillage automatique
-    après 3 min d'inactivité.
+7. **Position** — figer / rendre visible, **carte** des lieux d'aide (LAVI, UMV, MalleyPrairie,
+   police) avec votre position, vérification automatique (simulée), puis les points à régler en
+   trois groupes repliés (iPhone / Android).
+8. **Coffre** — « Ajouter une preuve » → choisir le **type** (blessure, message, dégâts, document,
+   audio, autre, ou prendre une photo) → fichier → note. Horodatage, empreinte SHA-256, journal
+   chronologique, état du dossier, **export ZIP** prêt pour un·e avocat·e ou le Centre LAVI.
+9. **Guides et témoignages** (icône livre en haut, ou tuile de l'accueil) — 7 guides pratiques
+   (partir en sécurité, appeler le 117, porter plainte, mes droits, sécuriser mon téléphone, parler
+   aux enfants, violence économique), paroles de victimes (récits illustratifs) et sites utiles.
+10. **Assistant** (aperçu) — bouton **robot** en bas à droite, ou glisser vers la droite : panneau
+    de discussion avec suggestions. Pas encore d'IA : la réponse est fixe et renvoie vers le 142,
+    le Centre LAVI ou « Situation ».
+11. **SOS** — bouton rouge en bas : appel police 117 via l'app (pas dans l'historique d'appels).
+12. **Face ID** (Réglages → « Ouverture rapide ») — depuis les recettes, garder le doigt appuyé sur
+    « Bonjour » : animation Face ID (simulée) et Abri s'ouvre sans passer par la recette.
+13. **Apparence Wikipédia** — Réglages → « Apparence de l'app » → Wikipédia, puis choisir un mot
+    secret. L'app devient un miroir de Wikipédia (vrais articles, recherche) ; taper le mot secret
+    dans la recherche puis Entrée ouvre Abri. La recette secrète ne marche plus tant que cette
+    apparence est active.
+14. **Retour en cuisine** (ou touche Échap) — retour immédiat à l'app de cuisine ; verrouillage
+    automatique après 3 min d'inactivité.
 
 ## Structure du projet
 
 ```
-abri/
+peacetech/
 ├── app.py            # serveur Flask : routes API, jeton d'accès à l'espace protégé
-├── logic.py          # logique : authentification recette, évaluation du questionnaire,
-│                     #           redirections, coffre à preuves, export ZIP
-├── content.py        # contenu : recettes, questionnaire, réseau vaudois, checklist
-│                     #           localisation, pièces du dossier  ← à modifier en priorité
+├── logic.py          # logique : authentification recette, options (position figée, Face ID),
+│                     #           évaluation du questionnaire, coffre à preuves, export ZIP
+├── content.py        # contenu : recettes, questionnaire, réseau vaudois + adresses (OFFICES),
+│                     #           checklist position, pièces du dossier, guides et témoignages
+│                     #           (RESOURCES)  ← à modifier en priorité
 ├── recettes_*.py     # 200 recettes (suisses, françaises, internationales) : 60 toujours
 │                     #   affichées — les seules utilisables comme recette secrète —
 │                     #   et une réserve de 140 d'où sortent 2 « recettes du jour »
 ├── templates/index.html
-├── static/app.js     # interface (une seule page, état + rendu)
+├── static/app.js     # interface (une seule page, état + rendu) ; section 4 = Abri
+├── static/style.css  # deux univers visuels : cuisine (cahier de recettes) / Abri (prune, rose, lavande)
 ├── wikimirror.py     # apparence « Wikipédia » : relais vers fr.wikipedia.org (recherche, articles)
 ├── static/wiki.js    # accueil du miroir + 5 articles de secours (démo sans Internet)
-├── static/style.css  # deux univers visuels : cuisine / Abri
-├── static/icon-*.png # icône « app de cuisine » (écran d'accueil du téléphone)
-├── static/vendor/leaflet/  # Leaflet 1.9.4 (carte de l'accueil d'Abri), chargé seulement
+├── static/icon-*.png # icône « Petits Plats » (cahier de recettes vichy, cocotte)
+├── static/abri-logo.png   # logo d'Abri (pour la présentation)
+├── static/vendor/leaflet/  # Leaflet 1.9.4 (carte de l'onglet Position), chargé seulement
 │                     #   une fois Abri ouvert ; fonds de carte : OpenStreetMap
 └── storage/          # créé à l'usage : config.json, preuves, journal (ignoré par git)
 ```
@@ -94,28 +106,40 @@ rien n'est écrit dans le navigateur (pas de localStorage, pas d'URL), le titre 
 Avec l'apparence **Wikipédia**, c'est `POST /api/wiki/search {q, submit}` qui joue ce rôle : il renvoie
 toujours des suggestions, et un jeton si la recherche validée (Entrée) est le mot secret. Le mot secret
 n'est gardé que sous forme d'empreinte SHA-256 (`wiki_phrase` dans `config.json`). Seul le secret de
-l'apparence active ouvre Abri. Le serveur interroge fr.wikipedia.org ; les images viennent de
-wikimedia.org, comme sur le vrai site. Sans Internet, 5 articles intégrés prennent le relais.
+l'apparence active ouvre Abri.
+
+**Face ID** (option) : `POST /api/cover/quick` délivre un jeton si l'option est activée dans les
+Réglages. La reconnaissance du visage est simulée par l'interface ; une vraie app passerait par la
+biométrie du téléphone avant d'appeler cette route.
 
 ## Ce qui est simulé (à dire au jury)
 
 - **Appels et messages** : écran d'appel VoIP et composeur de message dans l'app ; aucun appel réel
   n'est passé. Dans une vraie app, ils passeraient par un service VoIP/SMS (Twilio, etc.).
+- **Position figée** : l'interrupteur mémorise l'état et la carte le montre, mais un site web ne peut
+  pas changer la position vue par les autres applis. C'est le rôle d'une app native (iOS : « position
+  approximative » et révocation des partages ; Android : position fictive via les options développeur).
+- **Face ID** : animation simulée (voir ci-dessus).
 - **Analyse automatique du téléphone** : résultats fixes (`SCAN_FINDINGS` dans `content.py`).
   Une app native pourrait détecter les profils MDM, les partages actifs et les appareils du compte.
+- **Votre position sur la carte** : point fixe (centre de Lausanne / place de la Riponne quand la
+  position est figée), pas la géolocalisation réelle.
 - **Chiffrement du coffre** : les fichiers sont stockés en clair dans `storage/evidence/`
   (l'horodatage et l'empreinte SHA-256 sont réels).
+- **Témoignages** : récits illustratifs écrits pour le prototype, à remplacer par des témoignages
+  recueillis avec l'accord des personnes (MalleyPrairie, LAVI, with-you.ch), anonymisés.
 - **Assistant** : aperçu non fonctionnel. `POST /api/assistant` renvoie une réponse fixe ; le futur
   modèle d'IA se branche dans `logic.assistant_reply` (même forme de réponse : `text` + `actions`).
   Les messages ne vivent qu'en mémoire dans le navigateur et sont effacés au verrouillage.
 - **Enregistrement d'urgence** (Réglages, marqué « À venir ») : **placeholder non fonctionnel.**
-  L'interrupteur est mémorisé (`logic.FEATURES` / `prefs.json`) mais rien n'enregistre : ni le
-  triple-tap, ni la caméra, ni l'ajout au coffre. Impossible en web (le navigateur coupe la caméra
-  dès l'arrière-plan) : une vraie version demanderait une app native. Voir le commentaire dans
-  `logic.py` pour les limites légales (art. 179bis/ter CP) et de sécurité à traiter d'abord.
+  L'interrupteur est mémorisé (`logic.FEATURES` / `prefs.json`) mais rien n'enregistre. Impossible en
+  web (le navigateur coupe la caméra dès l'arrière-plan) : une vraie version demanderait une app
+  native. Voir le commentaire dans `logic.py` pour les limites légales (art. 179bis/ter CP).
 
 ## Sources
 
 - Questionnaire et réseau d'aide : canton de Vaud, Bureau de l'égalité entre les femmes et les
   hommes — « Violence domestique : où trouver de l'aide ? »
   https://www.vd.ch/etat-droit-finances/egalite-entre-les-femmes-et-les-hommes/violence-domestique
+- Adresses des lieux d'aide : sites officiels (lavi-vaud.ch, curml.ch, malleyprairie.ch, vd.ch) ;
+  coordonnées : OpenStreetMap.

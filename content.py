@@ -477,7 +477,7 @@ VAUD_URL = (
     "violence-domestique"
 )
 
-# Lieux où l'on peut se rendre, affichés sur la carte de l'accueil d'Abri.
+# Lieux où l'on peut se rendre, affichés sur la carte (onglet Position) et dans les contacts.
 # Adresses vérifiées le 26.09.2026 sur les sites officiels (lavi-vaud.ch, curml.ch, ghol.ch,
 # malleyprairie.ch, vd.ch/deiep/bci, vaudfamille.ch) ; coordonnées : OpenStreetMap (Nominatim).
 # Les lieux d'hébergement non publics ne doivent jamais figurer ici : MalleyPrairie publie
@@ -549,9 +549,9 @@ LOCATION_WARNING = (
 )
 
 LOCATION_GROUPS = [
-    {"id": "voir", "title": "Qui peut voir où je suis ?", "icon": "📍"},
-    {"id": "acces", "title": "Quelqu'un a-t-il accès à mon téléphone ou à mes comptes ?", "icon": "🔑"},
-    {"id": "objets", "title": "Un objet ou une photo peut-il dire où je suis ?", "icon": "👜"},
+    {"id": "voir", "title": "Qui voit où je suis ?", "icon": "📍"},
+    {"id": "acces", "title": "Mon téléphone et mes comptes", "icon": "🔑"},
+    {"id": "objets", "title": "Objets et photos qui me localisent", "icon": "👜"},
 ]
 
 LOCATION_AUDIT = [
@@ -765,7 +765,7 @@ DOSSIER_ITEMS = [
      "category": "audio"},
 ]
 
-# Assistant (aperçu) : panneau de discussion ouvert en glissant vers la droite dans Abri,
+# Assistant (aperçu) : panneau ouvert avec le bouton « robot » en bas de l'écran ou en glissant vers la droite dans Abri,
 # ou avec la bulle de l'accueil. Pas encore relié à un modèle d'IA : voir logic.assistant_reply.
 ASSISTANT = {
     "name": "Assistant Abri",
@@ -799,3 +799,132 @@ PLAINTE_INFO = [
     "Certaines infractions commises dans le couple sont poursuivies d'office : la procédure continue même si vous retirez la plainte.",
     "La police peut expulser immédiatement l'auteur·e du logement commun (jusqu'à 30 jours dans le canton de Vaud) ; un·e avocat·e peut demander des mesures de protection (interdiction d'approcher, art. 28b CC).",
 ]
+
+# ---------------------------------------------------------------------------
+# 6. Ressources : guides pratiques, paroles de victimes, liens utiles
+# ---------------------------------------------------------------------------
+# Guides : écrits court, une idée par étape. « steps » = ce qu'on peut faire, dans l'ordre.
+# « goto » renvoie vers un onglet d'Abri, « contact » vers un contact (bouton d'appel).
+RESOURCES = {
+    "guides": [
+        {
+            "id": "partir", "icon": "bag", "tone": "rose",
+            "title": "Préparer un départ en sécurité",
+            "summary": "Un sac prêt, des papiers en lieu sûr, un endroit où aller.",
+            "intro": "Partir se prépare, même si vous ne partez pas tout de suite. Chaque chose faite à l'avance "
+                     "rend le jour J plus simple et plus sûr.",
+            "steps": [
+                "Préparez un sac chez une personne de confiance : vêtements, médicaments, chargeur, un peu d'argent, les doudous des enfants.",
+                "Photographiez vos papiers (identité, permis, carte AVS, livret de famille, bail, contrat de travail) et déposez-les dans le coffre.",
+                "Mettez de côté les clés utiles : appartement, boîte aux lettres, voiture.",
+                "Repérez où dormir : le Centre MalleyPrairie accueille 24h/24, avec vos enfants.",
+                "Choisissez le moment : quand la personne est absente, et prévenez quelqu'un de confiance.",
+            ],
+            "contact": "malley_urg", "goto": "ev",
+        },
+        {
+            "id": "police", "icon": "shield", "tone": "lavande",
+            "title": "Que se passe-t-il si j'appelle le 117 ?",
+            "summary": "Ce que la police peut faire, et ce qu'on peut lui demander.",
+            "intro": "Appeler la police n'oblige pas à porter plainte. Son rôle est d'abord de vous mettre en sécurité.",
+            "steps": [
+                "Les agents viennent sur place et vous parlent séparément de la personne violente.",
+                "Ils peuvent expulser cette personne du logement immédiatement, jusqu'à 30 jours, même si le bail est à son nom.",
+                "Vous pouvez demander à parler à une policière, et à être accompagnée par une personne de confiance.",
+                "Un constat de vos blessures peut être organisé avec l'Unité de médecine des violences.",
+                "La police vous remet les coordonnées du Centre LAVI, qui vous conseille gratuitement ensuite.",
+            ],
+            "contact": "police",
+        },
+        {
+            "id": "plainte", "icon": "scale", "tone": "peche",
+            "title": "Porter plainte, étape par étape",
+            "summary": "Où, avec qui, avec quels documents, et ce qui se passe après.",
+            "intro": "Vous pouvez porter plainte à tout moment, même longtemps après les faits. Vous n'êtes pas seule pour le faire.",
+            "steps": [
+                "Avant : appelez le Centre LAVI. Une personne peut vous accompagner au poste de police.",
+                "Apportez ce que vous avez : constat médical, photos, captures d'écran, votre journal (l'onglet Dossier du coffre fait la liste).",
+                "La plainte se dépose dans n'importe quel poste de police, ou par écrit au Ministère public.",
+                "Après : la personne est entendue à son tour. Vous pouvez demander des mesures de protection (interdiction d'approcher, de contacter).",
+                "Certaines violences sont poursuivies d'office : la procédure continue même si vous retirez votre plainte.",
+            ],
+            "contact": "lavi", "goto": "ev",
+        },
+        {
+            "id": "droits", "icon": "book", "tone": "menthe",
+            "title": "Mes droits : les mesures de protection",
+            "summary": "Éloignement, garde des enfants, logement, permis de séjour.",
+            "intro": "La loi suisse prévoit plusieurs protections, que l'on soit mariée ou non.",
+            "steps": [
+                "Le juge civil peut interdire à la personne de vous approcher, de vous contacter et de revenir au logement (art. 28b CC).",
+                "Vous pouvez demander la garde des enfants et l'organisation des visites, même sans divorce.",
+                "Le bail peut vous être attribué, même s'il est au nom de la personne violente.",
+                "Si votre permis dépend de votre mariage, la séparation ne le fait pas perdre automatiquement : La Fraternité du CSP vous renseigne.",
+                "L'Ordre des avocats vaudois vous oriente vers un·e avocat·e ; l'assistance judiciaire peut prendre en charge les frais.",
+            ],
+            "contact": "avocats",
+        },
+        {
+            "id": "telephone", "icon": "phone-lock", "tone": "lavande",
+            "title": "Sécuriser mon téléphone",
+            "summary": "Position, comptes, applis espions : les points à vérifier.",
+            "intro": "Un téléphone surveillé empêche de demander de l'aide en sécurité. L'onglet Position vous guide point par point.",
+            "steps": [
+                "Vérifiez qui voit votre position (Localiser, Google Maps, Snap Map, Life360).",
+                "Retirez les appareils inconnus de votre compte Apple ou Google, changez le mot de passe.",
+                "Cherchez les profils ou applis que vous n'avez pas installés vous-même.",
+                "Si vous pensez être surveillée, utilisez un autre téléphone pour appeler à l'aide.",
+            ],
+            "goto": "loc",
+        },
+        {
+            "id": "enfants", "icon": "child", "tone": "rose",
+            "title": "Parler aux enfants",
+            "summary": "Les rassurer sans leur faire porter le poids de la situation.",
+            "intro": "Les enfants qui voient ou entendent la violence en souffrent, même sans être frappés. Ils ont besoin de mots simples et vrais.",
+            "steps": [
+                "Dites-leur que ce n'est pas de leur faute, et que ce n'est pas à eux de protéger les adultes.",
+                "Convenez d'un signal et d'un endroit sûr où aller pendant une dispute (chez un voisin, une pièce qui ferme).",
+                "Apprenez-leur à appeler le 117 et à donner l'adresse.",
+                "Les Offices de protection des mineurs et le Centre LAVI peuvent les aider aussi.",
+            ],
+            "contact": "opm",
+        },
+        {
+            "id": "argent", "icon": "coins", "tone": "peche",
+            "title": "Violence économique : reprendre la main",
+            "summary": "Compte séparé, revenus, dettes, aides possibles.",
+            "intro": "Contrôler l'argent est une façon de contrôler une personne. Il existe des moyens de retrouver une marge de manœuvre.",
+            "steps": [
+                "Ouvrez un compte à votre nom seul, dans une autre banque si possible ; faites-y verser votre salaire.",
+                "Gardez les preuves : relevés, factures, messages sur l'argent (le coffre les date).",
+                "Vous n'êtes pas responsable des dettes contractées à votre insu : demandez conseil au Centre LAVI.",
+                "En cas de séparation, une contribution d'entretien peut être demandée pour vous et les enfants.",
+            ],
+            "contact": "lavi", "goto": "ev",
+        },
+    ],
+    # Récits illustratifs, écrits pour le prototype. À remplacer par des témoignages recueillis
+    # avec l'accord des personnes (via MalleyPrairie, LAVI, with-you.ch), anonymisés.
+    "testimonies": [
+        {"name": "S., 34 ans", "text": "Pendant longtemps, je pensais que ce n'était pas « assez grave » pour appeler. "
+                                       "La personne du 142 m'a écoutée sans me juger. C'est là que j'ai compris que j'avais le droit d'être aidée."},
+        {"name": "M., 41 ans", "text": "Je gardais les captures d'écran dans mon téléphone, il les effaçait. Avoir un endroit où elles restent, "
+                                       "datées, ça a tout changé quand j'ai porté plainte."},
+        {"name": "A., 27 ans", "text": "Je ne savais pas que la police pouvait le faire partir, lui, et pas moi. On m'a expliqué mes droits "
+                                       "calmement. Ce soir-là, j'ai dormi chez moi, avec mes enfants."},
+    ],
+    "links": [
+        {"title": "Violence domestique — canton de Vaud", "desc": "Le site officiel : droits, démarches, réseau d'aide.",
+         "url": VAUD_URL},
+        {"title": "violencequefaire.ch", "desc": "Questions anonymes, réponses de professionnel·le·s.",
+         "url": "https://www.violencequefaire.ch"},
+        {"title": "Centre LAVI Vaud", "desc": "Aide aux victimes : conseils gratuits et confidentiels.",
+         "url": "https://www.lavi-vaud.ch"},
+        {"title": "Centre MalleyPrairie", "desc": "Accueil, hébergement d'urgence et consultations.",
+         "url": "https://www.malleyprairie.ch"},
+        {"title": "with-you.ch", "desc": "Association d'entraide et de soutien.",
+         "url": "https://with-you.ch"},
+    ],
+    "links_note": "Ces sites s'ouvrent dans le navigateur du téléphone : pensez à la navigation privée, ou effacez l'historique ensuite.",
+}
