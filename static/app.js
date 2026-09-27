@@ -1777,14 +1777,28 @@ let pressFired = false;                    // l'appui long a lancé Face ID : on
 const pressTarget = (t) => S.quick && (
   (S.mode === 'cover' && S.cover.tab === 'recettes' && !S.cover.recipe && t.closest('.cover-hero .greet'))
   || (S.mode === 'wiki' && t.closest('.wk-title.wk-home')));
-function pressStart(target) {
+let pressAt = null;                        // point de départ de l'appui : un doigt qui tremble un peu ne l'annule pas
+const PRESS_SLOP = 18;
+const evPoint = (e) => (e.touches && e.touches[0]) || e;
+let pressEl = null;                        // élément appuyé : un trait discret se remplit pendant les 3 s
+function pressStart(e) {
   clearTimeout(pressTimer); pressFired = false;
-  if (pressTarget(target)) pressTimer = setTimeout(() => { pressFired = true; startFaceId(); }, PRESS_MS);
+  if (!pressTarget(e.target)) { pressAt = null; return; }
+  const pt = evPoint(e); pressAt = { x: pt.clientX, y: pt.clientY };
+  pressEl = e.target.closest('.cover-hero .greet, .wk-title.wk-home'); pressEl?.classList.add('pressing');
+  pressTimer = setTimeout(() => { pressFired = true; pressAt = null; pressEl?.classList.remove('pressing'); startFaceId(); }, PRESS_MS);
 }
-const pressEnd = () => clearTimeout(pressTimer);
-screen.addEventListener('touchstart', (e) => pressStart(e.target), { passive: true });
-screen.addEventListener('mousedown', (e) => pressStart(e.target));
-['touchend', 'touchmove', 'touchcancel', 'mouseup', 'mouseleave'].forEach((ev) => screen.addEventListener(ev, pressEnd, { passive: true }));
+const pressEnd = () => { clearTimeout(pressTimer); pressAt = null; pressEl?.classList.remove('pressing'); pressEl = null; };
+const pressMove = (e) => {
+  if (!pressAt) return;
+  const pt = evPoint(e);
+  if (Math.hypot(pt.clientX - pressAt.x, pt.clientY - pressAt.y) > PRESS_SLOP) pressEnd();
+};
+screen.addEventListener('touchstart', pressStart, { passive: true });
+screen.addEventListener('mousedown', (e) => { if (e.button === 0) pressStart(e); });
+['touchend', 'touchcancel', 'mouseup', 'mouseleave'].forEach((ev) => screen.addEventListener(ev, pressEnd, { passive: true }));
+screen.addEventListener('touchmove', pressMove, { passive: true });
+screen.addEventListener('mousemove', pressMove, { passive: true });
 screen.addEventListener('contextmenu', (e) => { if (pressTarget(e.target)) e.preventDefault(); });
 screen.addEventListener('click', (e) => { if (pressFired) { pressFired = false; e.stopImmediatePropagation(); e.preventDefault(); } }, true);
 // Coffre : glisser-déposer des fichiers sur la zone d'ajout (ordinateur)
