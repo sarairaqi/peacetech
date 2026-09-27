@@ -3,7 +3,12 @@ app.py — Serveur du prototype Abri (Flask).
 
 Lancer :   python app.py            → http://127.0.0.1:5000
            python app.py --host 0.0.0.0   (pour ouvrir depuis un téléphone sur le même Wi-Fi)
-           python app.py --reset    (efface la configuration et les preuves : démo « premier lancement »)
+           python app.py --reset    (efface la configuration, les preuves et les messages :
+                                     démo « premier lancement »)
+
+Console conseil (démo du côté destinataire) : l'adresse /conseil?k=… est
+affichée au démarrage. Ouvrez-la dans une autre fenêtre pour répondre aux
+messages comme le ferait l'organisation contactée.
 
 L'application de couverture (« Petits Plats », recettes) est publique.
 L'espace protégé (« Abri ») n'est servi qu'avec un jeton obtenu en choisissant la
@@ -15,16 +20,22 @@ from __future__ import annotations
 
 import argparse
 import io
+import os
+import secrets
 from functools import wraps
+from pathlib import Path
 
 from flask import Flask, abort, jsonify, render_template, request, send_file
 
 import content as C
 import logic as L
+import messaging as M
 import wikimirror as W
+from models import get_db, init_app as init_db
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 Mo par fichier
+init_db(app)  # ferme proprement la connexion SQLite à la fin de chaque requête
 
 # Jetons de session valides (en mémoire : un redémarrage du serveur verrouille tout).
 _sessions: set[str] = set()
@@ -44,6 +55,41 @@ def protected(view):
         return view(*args, **kwargs)
     return wrapper
 
+
+
+# Clé de la console conseil. Stockée dans instance/ (comme message.key) pour
+# rester identique entre les redémarrages du rechargement automatique de Flask.
+_CONSOLE_KEY_FILE = Path(__file__).resolve().parent / "instance" / "console.key"
+
+
+def _load_or_create_console_key() -> str:
+    env_key = os.environ.get("ABRI_CONSOLE_KEY")
+    if env_key:
+        return env_key
+    if _CONSOLE_KEY_FILE.exists():
+        return _CONSOLE_KEY_FILE.read_text().strip()
+    _CONSOLE_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    key = secrets.token_urlsafe(16)
+    _CONSOLE_KEY_FILE.write_text(key)
+    try:
+        os.chmod(_CONSOLE_KEY_FILE, 0o600)
+    except OSError:
+        pass
+    return key
+
+
+CONSOLE_KEY = _load_or_create_console_key()
+
+
+def console_only(view):
+    """Routes de la console conseil : exigent la clé console, pas le jeton Abri."""
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        key = request.headers.get("X-Conseil-Key") or request.args.get("k") or ""
+        if not secrets.compare_digest(key, CONSOLE_KEY):
+            abort(401)
+        return view(*args, **kwargs)
+    return wrapper
 
 @app.errorhandler(401)
 def _unauthorized(_):
@@ -274,6 +320,82 @@ def questionnaire_evaluate():
     return jsonify(result)
 
 
+# --- Messagerie sécurisée --------------------------------------------------
+
+@app.get("/api/messages")
+@protected
+def messages_list():
+    contact_id = request.args.get("contact")
+    db = get_db()
+    return jsonify({
+        "messages": M.list_messages(db, contact_id),
+        "conversations": M.conversation_summary(db),
+    })
+
+
+@app.post("/api/messages")
+@protected
+def messages_send():
+    data = request.get_json(silent=True) or {}
+    db = get_db()
+    try:
+        msg = M.send_message(db, data.get("contact_id", ""), data.get("content", ""))
+    except ValueError as e:
+        abort(400, str(e))
+    return jsonify({"message": msg}), 201
+
+
+@app.delete("/api/messages/<int:message_id>")
+@protected
+def messages_delete(message_id):
+    db = get_db()
+    if not M.delete_message(db, message_id):
+        abort(404)
+    return jsonify({"ok": True, "conversations": M.conversation_summary(db)})
+
+
+@app.delete("/api/messages")
+@protected
+def messages_wipe_conversation():
+    contact_id = request.args.get("contact", "")
+    if not contact_id:
+        abort(400, "Contact manquant")
+    db = get_db()
+    count = M.wipe_conversation(db, contact_id)
+    return jsonify({"ok": True, "deleted": count, "conversations": M.conversation_summary(db)})
+
+
+# --- Console conseil (côté destinataire, démo) ------------------------------
+
+@app.get("/conseil")
+@console_only
+def conseil_page():
+    return render_template("conseil.html")
+
+
+@app.get("/api/conseil/messages")
+@console_only
+def conseil_messages():
+    contact_id = request.args.get("contact")
+    db = get_db()
+    return jsonify({
+        "messages": M.list_messages(db, contact_id) if contact_id else [],
+        "conversations": M.conversation_summary(db),
+    })
+
+
+@app.post("/api/conseil/messages")
+@console_only
+def conseil_reply():
+    data = request.get_json(silent=True) or {}
+    db = get_db()
+    try:
+        msg = M.receive_message(db, data.get("contact_id", ""), data.get("content", ""))
+    except ValueError as e:
+        abort(400, str(e))
+    return jsonify({"message": msg}), 201
+
+
 # --- Localisation ----------------------------------------------------------
 
 @app.get("/api/location/audit")
@@ -370,6 +492,7 @@ def journal_delete(entry_id):
 @protected
 def app_reset():
     L.reset_all()
+    M.wipe_messages(get_db())
     _sessions.clear()
     return jsonify({"ok": True})
 
@@ -380,10 +503,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Prototype Abri / Petits Plats")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5000)
-    parser.add_argument("--reset", action="store_true", help="efface configuration et preuves")
+    parser.add_argument("--reset", action="store_true", help="efface configuration, preuves et messages")
     args = parser.parse_args()
     if args.reset:
-        L.reset_all()
-        print("Configuration et preuves effacées.")
-    print(f"\n  Petits Plats / Abri  →  http://{'127.0.0.1' if args.host == '0.0.0.0' else args.host}:{args.port}\n")
+        # En dehors d'une requête HTTP, il faut pousser un contexte d'appli
+        # à la main pour que get_db() (basé sur `g`) fonctionne.
+        with app.app_context():
+            L.reset_all()
+            M.wipe_messages(get_db())
+        print("Configuration, preuves et messages effacés.")
+    base = f"http://{'127.0.0.1' if args.host == '0.0.0.0' else args.host}:{args.port}"
+    print(f"\n  Petits Plats / Abri  →  {base}")
+    print(f"  Console conseil      →  {base}/conseil?k={CONSOLE_KEY}\n")
     app.run(host=args.host, port=args.port, debug=True)
