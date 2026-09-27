@@ -1136,7 +1136,7 @@ function appEvidence() {
       ${B.journal.length ? `<div class="section-title">${t('Entrées · {n}', { n: B.journal.length })}</div>${B.journal.map((j) => `<div class="journal-entry">
         <div class="row between"><span class="dt">${esc(fmtDay(j.occurred))}</span><button class="icon-btn del" data-action="journal-del" data-id="${esc(j.id)}" title="${t('Supprimer')}" aria-label="${t('Supprimer')}">${LI.trash}</button></div>
         <p>${esc(j.text)}</p><div class="rec">${t('Écrit le {date}', { date: esc(fmtShort(j.recorded)) })}</div></div>`).join('')}`
-      : `<div class="ev-empty">${ic('pen', 'lavande', 'lg')}${t('Aucune entrée pour l\'instant.<br>Notez les faits dès que possible : les détails s\'oublient vite.')}</div>`}`;
+      : `<div class="ev-empty"></div>`}`;
   } else {
     const D = B.dossier;
     const acts = (d) => {
